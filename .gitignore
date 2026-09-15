@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+*.egg-info/
+build/
+dist/
+.env
+.env.*
+data/
+datasets/
+results/
+*.tar.gz
+*.zip
+.DS_Store
