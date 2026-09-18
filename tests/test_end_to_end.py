@@ -89,12 +89,12 @@ def test_run_evaluate_and_keep_outcome_distinct_from_provenance(dataset, tmp_pat
     evaluator = Evaluator(references(tmp_path, dataset), Judge())
     row = evaluator.evaluate(task, record)
     assert row["success"] == 1
-    assert row["information_coverage"] == 0
+    assert row["evidence_coverage"] == 0
     assert row["tokens"] == 18
     report = aggregate([row])
-    assert report["expert_coverage"] == 50
-    assert report["selection_precision"] == 100
-    assert report["task_coordination"] is None
+    assert report["expert_recall"] == 50
+    assert report["expert_precision"] == 100
+    assert report["task_orchestration"] is None
     assert json.loads((tmp_path / "runs" / (task.task_id + ".json")).read_text())[
         "answer"
     ]["text"]
@@ -175,7 +175,7 @@ def test_judge_feedback_is_bounded_and_costed(dataset, tmp_path, recover):
     evaluator = Evaluator(references(tmp_path, dataset), judge)
     if recover:
         result = evaluator.evaluate(task, record)
-        assert result["information_coverage"] == 0
+        assert result["evidence_coverage"] == 0
         assert len(result["judge_attempts"]) == 2
         assert result["judge_usage"] == {"input_tokens": 20, "output_tokens": 10}
     else:

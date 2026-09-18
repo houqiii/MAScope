@@ -8,6 +8,7 @@ from .download import download, fetch_sources
 from .evaluation import Evaluator, JudgeValidationError, aggregate
 from .model import OpenAICompatible
 from .runner import load_agent, run
+from .report import summarize_directories
 
 
 def parser():
@@ -23,6 +24,9 @@ def parser():
     sources.add_argument("--manifest", required=True)
     sources.add_argument("--dest", required=True)
     sources.add_argument("--site")
+    summary = commands.add_parser("summarize")
+    summary.add_argument("--evaluations", nargs="+", required=True)
+    summary.add_argument("--out", required=True)
     for name in ["verify", "list", "run", "evaluate"]:
         command = commands.add_parser(name)
         command.add_argument("--runtime", required=True)
@@ -45,6 +49,13 @@ def parser():
 
 def main():
     arguments = parser().parse_args()
+    if arguments.command == "summarize":
+        report = summarize_directories(arguments.evaluations)
+        output = Path(arguments.out)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(report, indent=2))
+        print(json.dumps(report, indent=2))
+        return
     if arguments.command == "download":
         if not arguments.base_url:
             raise SystemExit(
@@ -136,6 +147,9 @@ def main():
             (output / (task.task_id + ".json")).write_text(
                 json.dumps(row, ensure_ascii=False, indent=2)
             )
+            (output / (task.task_id + ".failed.json")).unlink(missing_ok=True)
         summary = aggregate(rows)
+        summary["dataset_version"] = dataset.manifest["version"]
+        summary["task_ids"] = [task.task_id for task in tasks]
         (output / "summary.json").write_text(json.dumps(summary, indent=2))
         print(json.dumps(summary, indent=2))

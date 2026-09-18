@@ -40,3 +40,44 @@ Source question-and-answer content retains the applicable Stack Exchange content
 The software MIT license does not relicense source content. Keep source attribution and license information when redistributing a corpus.
 
 Task formulations and benchmark annotations are distributed under CC BY-SA 4.0. Each archive includes `DATA_LICENSE.txt`.
+
+## Version 1.1.0
+
+| Required experts per query | Queries |
+| --- | ---: |
+| 2 | 686 |
+| 3 | 458 |
+| 4 | 928 |
+| 5 | 12 |
+| 6 | 478 |
+| 8 | 204 |
+| **Total** | **2,766** |
+
+The release contains 11,018 required expertise assignments. A total of 662 question formulations receive additional, source-grounded requirements: 458 S1 queries gain one specialist and 204 S3 queries gain two. The nine taxonomy-cell counts, 499 family identifiers, two formulations per base instance and existing selected dependencies are preserved. The remaining 2,104 questions are unchanged.
+
+These are task and annotation revisions, not relabelings of existing runs. The 119 extended families were checked for source support and consistency: 111 received a separate model review, while eight were authored and inspected directly against the retrieved sources in the release preparation session. This is model-assisted validation, not a human annotation study. Source ownership, dependency graphs, paired annotations, counts and archive integrity are checked programmatically. Modified tasks require new method executions and evaluations.
+
+Evidence identifiers are release-specific opaque strings. Source post identifiers, URLs and attribution remain available in the corpus and source manifest. Treat evidence identifiers as opaque when integrating a method.
+
+## Reference schema
+
+An evaluator record contains:
+
+```text
+task_id                 Public task identifier
+family_id               Family grouping for partitions and resampling
+instance_id             Base instance shared by two formulations
+formulation             1 or 2
+cell                    C1S1 through C3S3
+required_experts        Required member identifiers
+requirements[]
+  id                    Information-unit identifier
+  claim                 Required, verifiable content
+  satisfying_agents     Specialists that can supply the unit
+  depends_on            Predecessor unit identifiers
+  acceptable_evidence   Accepted source identifiers
+  sources               Reference excerpts and source URLs
+dependency              Selected {from, to} edge, or null for C1
+```
+
+References are evaluator inputs and must not be fed into method planning or member retrieval. Dataset manifests record the release version, counts and file checksums; run records include the version used for execution.

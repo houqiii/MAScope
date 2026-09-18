@@ -73,7 +73,7 @@ def test_micro_averaging_and_conditional_denominators():
         "family_id": "family_a",
         "cell": "C2S1",
         "success": 1,
-        "information_coverage": 1,
+        "evidence_coverage": 1,
         "expert_hits": 2,
         "required_experts": 2,
         "recruited_experts": 4,
@@ -89,19 +89,19 @@ def test_micro_averaging_and_conditional_denominators():
         "expert_hits": 1,
         "required_experts": 6,
         "recruited_experts": 1,
-        "information_coverage": 0,
+        "evidence_coverage": 0,
         "stages": [False] * 5,
         "tokens": None,
     }
     result = aggregate([first, second])
-    assert result["expert_coverage"] == 37.5
-    assert result["selection_precision"] == 60
+    assert result["expert_recall"] == 37.5
+    assert result["expert_precision"] == 60
     assert result["success"] == 50
-    assert result["task_coordination"] == 100
+    assert result["task_orchestration"] == 100
     assert result["result_integration"] == 0
     assert result["mean_tokens"] is None
     assert result["runs_with_unknown_tokens"] == 1
-    assert aggregate([{**second, "stages": [False] * 5}])["task_coordination"] is None
+    assert aggregate([{**second, "stages": [False] * 5}])["task_orchestration"] is None
 
 
 def test_duplicate_results_are_not_double_counted():
