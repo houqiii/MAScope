@@ -1,8 +1,7 @@
-<p align="center">
-  <img src="assets/logo.png" width="105" alt="MAScope logo">
-</p>
-
-<h1 align="center">MAScope: Diagnosing Collaboration Loss<br>in Multi-Agent Systems</h1>
+<h1>
+  <img src="assets/logo.png" width="72" align="left" alt="MAScope logo">
+  MAScope: Diagnosing Collaboration Loss<br>in Multi-Agent Systems
+</h1>
 
 <p align="center">
   <a href="assets/MAScope.pdf">Paper</a> ·
