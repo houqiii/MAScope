@@ -6,6 +6,7 @@
 
 <p align="center">
   <a href="assets/MAScope.pdf">Paper</a> ·
+  <a href="https://github.com/houqiii/MAScope/releases/tag/v1.1.0">Data</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="docs/benchmark.md">Benchmark</a> ·
   <a href="docs/integration.md">Integration</a> ·
@@ -64,9 +65,10 @@ The runtime uses the Python standard library and an OpenAI-compatible chat-compl
 
 ### 2. Download the data
 
-Set `MASCOPE_DATA_URL` to the directory hosting the versioned MAScope archives, then download and verify them:
+Download the fixed [v1.1.0 data release](https://github.com/houqiii/MAScope/releases/tag/v1.1.0) and verify it:
 
 ```bash
+export MASCOPE_DATA_URL="https://github.com/houqiii/MAScope/releases/download/v1.1.0"
 mascope download --base-url "$MASCOPE_DATA_URL" --dest data
 mascope verify --runtime data/runtime
 mascope list --runtime data/runtime

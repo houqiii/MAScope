@@ -1,5 +1,13 @@
 # Data
 
+The fixed benchmark snapshot is available from the [v1.1.0 GitHub Release](https://github.com/houqiii/MAScope/releases/tag/v1.1.0).
+
+```bash
+export MASCOPE_DATA_URL="https://github.com/houqiii/MAScope/releases/download/v1.1.0"
+mascope download --base-url "$MASCOPE_DATA_URL" --dest data
+mascope verify --runtime data/runtime
+```
+
 ## Release layout
 
 The release manifest packaged with the software specifies archive filenames, byte sizes and SHA-256 checksums. Supply the directory that hosts these archives with `--base-url` or `MASCOPE_DATA_URL`. HTTP, HTTPS and local `file://` directories are supported.
