@@ -135,3 +135,10 @@ def test_inherited_evidence_requires_actual_input_delivery(dataset):
     assert work["inputs"][0]["agent_id"] == "alpha"
     with pytest.raises(KeyError):
         environment.start_work("beta", "fabricated", inputs=[{"artifact_id": "fake"}])
+
+
+def test_retrieval_limit_matches_environment(dataset):
+    import pytest
+
+    with pytest.raises(ValueError, match="between 1 and 8"):
+        dataset.corpus("alpha").search("route", limit=9)

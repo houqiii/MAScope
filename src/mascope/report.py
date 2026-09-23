@@ -4,7 +4,6 @@ from pathlib import Path
 from .dataset import read_json
 from .evaluation import aggregate
 
-
 METRICS = (
     "success",
     "evidence_coverage",
@@ -38,6 +37,8 @@ def summarize_runs(runs):
                 row["instance_id"],
                 row["cell"],
                 row["required_experts"],
+                row.get("scorer_version", "legacy"),
+                row.get("reference_sha256"),
             )
         identities.append(identity)
     if len(versions) != 1 or any(x != identities[0] for x in identities[1:]):
@@ -58,6 +59,7 @@ def summarize_runs(runs):
 
     result = {
         "dataset_version": next(iter(versions)),
+        "scorer_version": runs[0][0].get("scorer_version", "legacy"),
         "runs": len(runs),
         "queries_per_run": len(runs[0]),
         "metrics": combine(summaries),

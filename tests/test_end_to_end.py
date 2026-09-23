@@ -31,7 +31,7 @@ class Judge:
                             "evidence_ids": [],
                         }
                     ],
-                    "dependency": None,
+                    "dependencies": [],
                 }
             ),
             30,
@@ -57,7 +57,7 @@ def references(tmp_path, dataset):
                 "sources": [{"text": "The blue route reaches the destination."}],
             }
         ],
-        "dependency": None,
+        "dependencies": [],
     }
     path = root / "references.jsonl"
     path.write_text(json.dumps(row) + "\n")
@@ -154,7 +154,7 @@ def test_judge_feedback_is_bounded_and_costed(dataset, tmp_path, recover):
                                 "evidence_ids": ["alpha:1:2"] if supported else [],
                             }
                         ],
-                        "dependency": None,
+                        "dependencies": [],
                     }
                 ),
                 10,

@@ -5,7 +5,10 @@ from mascope.evaluation import aggregate, validate_judgment
 
 def sample():
     reference = {
-        "requirements": [{"id": "r1", "acceptable_evidence": ["alpha:1:2"]}],
+        "requirements": [
+            {"id": "r1", "acceptable_evidence": ["alpha:1:2"]},
+            {"id": "r2", "acceptable_evidence": ["beta:1:2"], "depends_on": ["r1"]},
+        ],
         "dependency": {"from": "r1", "to": "r2"},
     }
     events = [
@@ -20,12 +23,17 @@ def sample():
                 "satisfied": True,
                 "supported": True,
                 "evidence_ids": ["alpha:1:2"],
+            },
+            {"id": "r2", "satisfied": False, "supported": False, "evidence_ids": []},
+        ],
+        "dependencies": [
+            {
+                "from": "r1",
+                "to": "r2",
+                "stages": [True, True, False, False, False],
+                "event_ids": [["e000001"], ["e000002"], [], [], []],
             }
         ],
-        "dependency": {
-            "stages": [True, True, False, False, False],
-            "event_ids": [["e000001"], ["e000002"], [], [], []],
-        },
     }
     return reference, {"events": events}, judgment
 
@@ -52,11 +60,11 @@ def test_support_requires_retrieval_and_contribution():
 def test_invalid_judgments_rejected(mutation):
     reference, record, judgment = sample()
     if mutation == "future_stage":
-        judgment["dependency"]["stages"][4] = True
+        judgment["dependencies"][0]["stages"][4] = True
     elif mutation == "false_boolean":
         judgment["requirements"][0]["satisfied"] = "false"
     elif mutation == "fake_event":
-        judgment["dependency"]["event_ids"][0] = ["e999999"]
+        judgment["dependencies"][0]["event_ids"][0] = ["e999999"]
     elif mutation == "missing_requirement":
         judgment["requirements"] = []
     elif mutation == "duplicate_requirement":
@@ -67,7 +75,7 @@ def test_invalid_judgments_rejected(mutation):
         validate_judgment(judgment, reference, record)
 
 
-def test_micro_averaging_and_conditional_denominators():
+def test_query_macro_averaging_and_conditional_denominators():
     first = {
         "task_id": "a",
         "family_id": "family_a",
@@ -94,8 +102,8 @@ def test_micro_averaging_and_conditional_denominators():
         "tokens": None,
     }
     result = aggregate([first, second])
-    assert result["expert_recall"] == 37.5
-    assert result["expert_precision"] == 60
+    assert result["expert_recall"] == pytest.approx(100 * (1 + 1 / 6) / 2)
+    assert result["expert_precision"] == 75
     assert result["success"] == 50
     assert result["task_orchestration"] == 100
     assert result["result_integration"] == 0
@@ -107,3 +115,22 @@ def test_micro_averaging_and_conditional_denominators():
 def test_duplicate_results_are_not_double_counted():
     with pytest.raises(ValueError):
         aggregate([{"task_id": "same"}, {"task_id": "same"}])
+
+
+def test_semantic_judge_cannot_omit_or_repeat_graph_edges():
+    import copy
+
+    reference, record, judgment = sample()
+    reference["requirements"].append(
+        {"id": "r3", "acceptable_evidence": [], "depends_on": ["r1"]}
+    )
+    judgment["requirements"].append(
+        {"id": "r3", "satisfied": False, "supported": False, "evidence_ids": []}
+    )
+    with pytest.raises(ValueError, match="every dependency"):
+        validate_judgment(judgment, reference, record)
+    judgment["dependencies"].append(copy.deepcopy(judgment["dependencies"][0]))
+    with pytest.raises(ValueError, match="every dependency"):
+        validate_judgment(judgment, reference, record)
+    judgment["dependencies"][1]["to"] = "r3"
+    validate_judgment(judgment, reference, record)

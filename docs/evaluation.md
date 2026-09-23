@@ -1,59 +1,81 @@
 # Evaluation
 
-## Inputs and outputs
+MAScope reports outcome, expert selection, progress along the complete dependency graph, and execution cost. Every score records its dataset version, scorer version and reference hash. Results produced with different contracts must not be pooled.
 
-Evaluation requires a task, its recorded execution and the matching reference bundle. The default command expects a run for every task. Use `--task-ids` to select a subset explicitly; missing files are never silently removed from the denominator.
+## Deterministic evaluation
 
-Each output record contains task and family identifiers, the dataset version, taxonomy cell, outcome, expert counts, dependency-stage decisions, execution usage and the full semantic judgment. `summary.json` aggregates the selected records. Judge calls and tokens remain separate from agent execution cost.
+```bash
+mascope verify-references --annotations /path/to/frozen-references
+mascope evaluate \
+  --runtime data/runtime \
+  --annotations /path/to/frozen-references \
+  --runs results/run-1 \
+  --out results/eval-1
+```
 
-## Outcome, coverage and selection
+The default scorer makes no model calls. It requires schema 2.0 references with frozen source identifiers and term variants. It never infers missing terms, substitutes a model judge, or turns an invalid annotation into a failed task. The currently downloadable v1.1.0 annotations predate this contract; see [Release compatibility](release-status.md).
+
+Each unit has one or more acceptance alternatives. An alternative requires at least one of its exact source identifiers and at least one registered surface variant from **every** term group. The identifier and terms must occur in the submitted answer. Matching is literal and case-sensitive: case, inflection and quantity variants must be listed explicitly. Alternatives are evaluated independently; terms from one cannot be combined with the identifier of another. Match records contain the accepted identifier and the exact matched terms and offsets. Unregistered paraphrases are misses.
+
+## Outcome and expert selection
 
 | Field | Definition |
 | --- | --- |
-| `success` | Percentage of queries whose final answer satisfies every required unit and the overall task constraints |
-| `evidence_coverage` | Mean percentage of required units correctly expressed and supported by accepted, observed evidence |
-| `expert_recall` | Required specialists recruited, divided by all required specialist assignments |
-| `expert_precision` | Required specialists recruited, divided by all recruited specialists |
-| `mean_calls` | Mean number of attempted model calls per query |
-| `mean_tokens` | Mean input plus output tokens per query, across planning, members, synthesis and memory |
+| `success` | Percentage of queries for which every required unit passes acceptance |
+| `evidence_coverage` | Mean percentage of accepted units per query |
+| `expert_recall` | Mean, over queries, of matched required expert roles / required roles |
+| `expert_precision` | Mean, over queries, of matched required expert roles / distinct recruited agents |
+| `mean_calls` | Mean attempted model calls per query |
+| `mean_tokens` | Mean input plus output tokens across all model-call phases |
 
-Expert counts are micro-averaged over queries. Evidence coverage is macro-averaged over queries. Correct content without observed source support can satisfy an outcome requirement without counting toward evidence coverage. Recruiting every member can raise recall while reducing precision.
+Success and coverage use the **same unit predicate**. A failed query can have positive coverage. Recall and precision are macro averages across queries, not ratios of pooled expert counts. Recruiting nobody gives zero selection precision. Equivalent experts are represented as alternatives for a required role; a maximum one-to-one matching prevents one agent receiving credit for multiple roles or several equivalents receiving repeated credit for one role.
 
-Per-task `evidence_coverage` is a fraction in [0, 1]. Aggregate reports express all rates in percent. A zero denominator is `null`, not zero.
+Per-task `evidence_coverage` is a fraction; aggregate rates are percentages. Empty conditional denominators produce `null`.
 
-## Dependency stages and capabilities
+## The full dependency graph
 
-Each C2/C3 task has one dependency selected before execution. Its five stages are cumulative:
+All edges in `requirements[].depends_on` are evaluated. No representative edge is selected. Each edge has five nested stages:
 
-| Stage | Required event |
+| Stage | Trace predicate |
 | --- | --- |
-| 1 · Ready | The predecessor finding is available and a relevant downstream expert is recruited |
-| 2 · Assigned | The necessary follow-up work starts at that expert after the predecessor finding |
-| 3 · Informed | The executor receives usable predecessor evidence and key constraints |
-| 4 · Solved | The expert produces a correct local result |
-| 5 · Adopted | That result survives into the final answer |
+| Ready | A predecessor local output is available and an eligible downstream expert has been recruited |
+| Task orchestration | A later assignment to that expert contains the successor's registered objective terms |
+| Information transfer | That assignment carries the predecessor output, its accepted identifier and constraint terms |
+| Local solve | The assigned expert subsequently produces the successor result with accepted source and terms |
+| Result integration | The final answer contains the successor identifier and terms |
 
-Let `n1` through `n5` count queries reaching each stage. Reports provide:
+The native runtime records assignments as `work_start`, local outputs as `contribution`, and submission as `final`. A message alone is not an assignment or delivered input. Carried artifacts are checked against the original contribution. Local outputs belong to the interval after their assignment and before the next assignment to that expert. Repeated attempts are allowed: the deepest valid execution of an edge is retained. A local output without citations can match by its registered terms; an output with an incorrect citation does not receive this fallback. Final answers always require identifiers.
 
-| Field | Ratio | Interpretation |
-| --- | --- | --- |
-| `task_orchestration` | `100 × n2 / n1` | Ready work becomes an actual assignment |
-| `information_transfer` | `100 × n3 / n2` | Assignments receive the information they need |
-| `local_solve` | `100 × n4 / n3` | Informed experts produce correct local results |
-| `result_integration` | `100 × n5 / n4` | Correct local results reach the answer |
-| `dependency_survival` | `100 × n5 / n1` | Ready dependencies survive the whole chain |
+A query reaches stage k only if **every edge** reaches stage k. Let n1 through n5 count queries reaching the five stages:
 
-When denominators are nonzero, dependency survival equals the product of the four conditional rates after converting percentages to fractions. `local_solve` is the agent-side reference; expert selection and the other three conditional stages define the four collaboration capabilities.
+| Field | Ratio |
+| --- | --- |
+| `task_orchestration` | 100 × n2 / n1 |
+| `information_transfer` | 100 × n3 / n2 |
+| `local_solve` | 100 × n4 / n3 |
+| `result_integration` | 100 × n5 / n4 |
+| `dependency_survival` | 100 × n5 / n1 |
 
-The report includes `dependency_counts`, `dependent_queries`, and the same metrics grouped under `by_cell`, `by_structure` and `by_scale`. C1 tasks have no selected dependency and therefore have `null` conditional process rates.
+The four conditional rates multiply to dependency survival when their denominators are nonzero. Edge-level decisions and event locators remain in `edge_judgments`; aggregation uses query-level stages. C1 has an empty graph and does not enter process-rate denominators. Reports also group results by taxonomy cell, structure and expertise scale.
 
-## Source checks and semantic judgments
+## Costs and failures
 
-The supplied evaluator uses a configurable semantic judge for content correctness and dependency-stage decisions. It receives the question, reference claims with accepted source text, final answer and ordered trace. `JUDGE_PROMPT` in `mascope.evaluation` specifies the judgment contract.
+All model calls, including controller, member, synthesis and memory calls, go through `complete`. Provider-reported input and output usage is counted once. Retrieval calls are counted separately in the run record; retrieved text passed to a model is charged through that model's input tokens. No estimated retrieval-token surcharge is added. Deployments with separately billed retrieval must supply their accounting policy alongside the run.
 
-Programmatic validation requires every reference requirement exactly once; accepted evidence that was both retrieved and contributed; five nested stage decisions; and real event locators for positive stages. A citation identifier alone does not establish semantic support. Planning a step does not count as executing it, and a recorded message counts as usable input only when it reaches the executor's context.
+Budget exhaustion retains any answer already submitted and its measured trajectory; no additional synthesis call is inserted. Other runtime errors score as unsuccessful while retaining their trace. Failed calls with missing provider usage leave token cost unknown. If any selected task has unknown usage, aggregate `mean_tokens` is `null`.
 
-Full judgments and reasons are saved. Invalid responses receive validation feedback, with at most three judge attempts per task. Exhausted attempts produce a `.failed.json` record and stop evaluation rather than assigning a negative task label. The judge model is selected explicitly and can be replaced by a compatible adjudication service. Source/trace validation is deterministic; semantic assessments depend on the chosen judge and should be audited when comparing systems.
+## Semantic evaluation of the existing data snapshot
+
+```bash
+mascope evaluate \
+  --runtime data/runtime --annotations data/evaluator \
+  --runs results/run-1 --scorer semantic \
+  --judge-model "$JUDGE_MODEL" --out results/semantic-eval-1
+```
+
+This explicit compatibility mode uses source/trace validation and a configurable content judge for v1.1.0 references. It checks **every annotated edge**, but its outcome predicate and content decisions differ from deterministic acceptance. Correct unsupported content can satisfy a semantic outcome requirement without increasing supported coverage. Its results are marked `semantic-full-graph-2` and are not interchangeable with deterministic results or the earlier single-edge scorer.
+
+The judge must return every unit and every edge exactly once, five nested stage decisions per edge, and real event locators for positive stages. Invalid judgments receive validation feedback, at most three attempts; exhausted attempts produce `.failed.json` and stop evaluation. Judge usage is saved separately from execution cost.
 
 ## Repeated runs
 
@@ -63,16 +85,4 @@ mascope summarize \
   --out results/summary.json
 ```
 
-The summarizer checks that repetitions use identical task references and dataset versions. It computes each metric separately per repetition, then reports its mean, sample standard deviation and individual values. Standard deviation is `null` for a single repetition. It does not pool repeated tasks into a larger apparent sample.
-
-Use separate result directories for independent repetitions. Control method-specific random seeds inside the supplied method and record its configuration alongside the run. The runtime does not impose or claim deterministic sampling at the model provider.
-
-## Failures and cost
-
-Runtime errors count as unsuccessful tasks with zero final evidence coverage; their traces remain available for process inspection. Failed calls with unavailable provider usage leave token cost unknown. If any selected task has unknown usage, `mean_tokens` is `null`; repeated-run summaries preserve this rather than silently discarding incomplete observations.
-
-Memory calls made through `complete(phase="memory")` count toward execution cost. This allows the same evaluator to compare a method with and without memory while keeping the task set and other execution settings fixed.
-
-## Migration from 1.0
-
-Metric names are now `evidence_coverage`, `expert_recall`, `expert_precision` and `task_orchestration`, replacing `information_coverage`, `expert_coverage`, `selection_precision` and `task_coordination`. Summaries additionally include local solve, dependency survival and complete structure/scale breakdowns. New evaluations include dataset-version metadata needed for repeated-run validation.
+Each repetition must use the same task set, dataset, scorer and reference hashes. Metrics are computed separately per repetition, then summarized by their mean and sample standard deviation. One repetition has no estimated standard deviation. Missing runs or failed judgments are not silently removed. Keep both formulations of each base instance and all instances of a family together when making development splits or resampling tasks.

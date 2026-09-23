@@ -24,10 +24,12 @@ The environment leaves recruitment, delegation, communication and synthesis to t
 
 - **A specialist environment:** 51 Stack Exchange communities, organized into six resource groups. Public profiles support expert selection; each member retrieves from its own corpus.
 - **Collaboration tasks:** 2,766 queries across 499 families, with 11,018 required expertise assignments. Tasks vary in both collaboration structure and expertise scale.
-- **Contribution-level evaluation:** task success and evidence coverage, four collaboration capabilities, and the survival of required work along a dependency chain.
+- **Contribution-level evaluation:** task success and evidence coverage, four collaboration capabilities, and the survival of required work across the complete dependency graph.
 - **Protocol-independent execution:** connect an agent system through one Python entrypoint. The environment records recruitment, member work, delivered inputs, contributions, final answers and model usage.
 
 This repository contains the benchmark runtime, evaluator, download tools and documentation. Agent methods are supplied by the user. Data archives are distributed separately.
+
+**Release compatibility:** the current v1.1.0 download supports execution and semantic evaluation. The deterministic whole-graph scorer requires frozen schema 2.0 references, which are not yet in that data release. See [release compatibility](docs/release-status.md) before reproducing measurements.
 
 ## What the measurements distinguish
 
@@ -35,11 +37,11 @@ Recruiting a relevant expert does not establish that its finding was used. MASco
 
 ## Benchmark at a glance
 
-| Task structure | S1: 2–3 experts | S2: 4–5 experts | S3: 6–8 experts | Total |
+| Task structure | S1: 2–3 experts | S2: 4–5 experts | S3: 6+ experts | Total |
 | --- | ---: | ---: | ---: | ---: |
 | C1 · Parallel composition | 454 | 390 | 292 | 1,136 |
 | C2 · Sequential dependence | 394 | 314 | 236 | 944 |
-| C3 · Expert discovery | 296 | 236 | 154 | 686 |
+| C3 · Clue-based expert discovery | 296 | 236 | 154 | 686 |
 | **Total** | **1,144** | **940** | **682** | **2,766** |
 
 In **parallel composition**, independent contributions must be combined. In **sequential dependence**, a later piece of work needs an earlier finding. In **expert discovery**, a finding also reveals which expertise is needed next. The expertise scale describes task requirements; it does not restrict the number of members a method may recruit.
@@ -108,7 +110,7 @@ mascope run \
   --out results/run-1
 ```
 
-Use `--task-ids` for a selected subset and `--resume` to retain completed run files. Each task starts with a fresh environment. The default budget is 2,000,000 tokens and 256 model calls per task.
+The default decoding is temperature 0.3, top-p 0.95 and up to 4,096 output tokens per call. Use `--seed` when supported by the provider. Use `--task-ids` for a selected subset and `--resume` to retain completed run files. Each task starts with a fresh environment. The default budget is 2,000,000 tokens and 256 model calls per task.
 
 <p align="center">
   <img src="assets/figures/workflow.png" width="100%" alt="A service-diagnosis task from initialization through specialist collaboration to evaluation">
@@ -121,11 +123,11 @@ mascope evaluate \
   --runtime data/runtime \
   --annotations data/evaluator \
   --runs results/run-1 \
-  --judge-model "$JUDGE_MODEL" \
+  --scorer semantic --judge-model "$JUDGE_MODEL" \
   --out results/eval-1
 ```
 
-Evaluation combines trace and source-integrity checks with semantic judgments against the reference requirements. Per-task records retain the judgments, evidence identifiers, trace locators and judge usage. Agent execution cost and evaluator cost are kept separate.
+The command above evaluates the current data snapshot with the explicit semantic compatibility scorer. It records every dependency edge and aggregates a stage only when all edges pass. For frozen schema 2.0 references, omit `--scorer semantic` and `--judge-model` to use deterministic source-and-term matching without evaluator model calls. See [reference format](docs/reference-format.md) and [release compatibility](docs/release-status.md).
 
 | Evaluation view | Reported measurements |
 | --- | --- |
@@ -151,7 +153,7 @@ mascope summarize \
   --out results/summary.json
 ```
 
-The report contains each repetition's value, the mean and the sample standard deviation. Runs must use the same dataset version and task set. Use family-aware splits for development and family-aware resampling for task-level uncertainty; the two formulations of a base instance are related observations.
+The report contains each repetition's value, the mean and the sample standard deviation. Runs must use the same dataset version, scorer, references and task set. Use family-aware splits for development and family-aware resampling for task-level uncertainty; the two formulations of a base instance are related observations.
 
 ## Repository layout
 
@@ -161,7 +163,10 @@ src/mascope/
   dataset.py             Task loading and member-local retrieval
   environment.py         Member operations, traces and budgets
   runner.py              Agent entrypoint and resumable task execution
-  evaluation.py          Reference-based judgments and capability metrics
+  deterministic.py       Source-and-term matching across the full graph
+  reference.py           Annotation validation and expert-role matching
+  construction.py        Source identifiers and certification-record checks
+  evaluation.py          Semantic compatibility scorer and capability metrics
   report.py              Repeated-run summaries
   download.py            Verified archives and public source retrieval
   model.py               OpenAI-compatible model interface

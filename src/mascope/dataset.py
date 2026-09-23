@@ -84,8 +84,8 @@ class Corpus:
             return json.loads(stream.readline())
 
     def search(self, query, limit=5):
-        if not 1 <= limit <= 20:
-            raise ValueError("Search limit must be between 1 and 20")
+        if not 1 <= limit <= 8:
+            raise ValueError("Search limit must be between 1 and 8")
         self._load()
         terms = tokens(query)
         scores = {}

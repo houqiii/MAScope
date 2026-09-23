@@ -4,7 +4,7 @@ import json
 import pytest
 
 from mascope.evaluation import aggregate
-from mascope.report import summarize_runs, summarize_directories
+from mascope.report import summarize_directories, summarize_runs
 
 
 def rows():

@@ -34,6 +34,8 @@ def test_provider_response_and_request_contract(monkeypatch, mode):
         ) == Completion("Result", 13, 4)
         assert seen[0]["response_format"] == {"type": "json_object"}
         assert seen[0]["max_tokens"] == 90
+        assert seen[0]["temperature"] == 0.3
+        assert seen[0]["top_p"] == 0.95
     else:
         with pytest.raises(RuntimeError):
             model.complete([])

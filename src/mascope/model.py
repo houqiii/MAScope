@@ -25,18 +25,35 @@ class ResponseError(RuntimeError):
 
 
 class OpenAICompatible:
-    def __init__(self, model, base_url=None, api_key=None, timeout=180):
+    def __init__(
+        self,
+        model,
+        base_url=None,
+        api_key=None,
+        timeout=180,
+        temperature=0.3,
+        top_p=0.95,
+        seed=None,
+    ):
         self.model = model
         self.base_url = (
             base_url or os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
         ).rstrip("/")
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self.timeout = timeout
+        self.decoding = {"temperature": temperature, "top_p": top_p}
+        if seed is not None:
+            self.decoding["seed"] = seed
         if not self.api_key:
             raise ValueError("Set OPENAI_API_KEY")
 
     def complete(self, messages, max_tokens=4096, json_output=False):
-        payload = {"model": self.model, "messages": messages, "max_tokens": max_tokens}
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            **self.decoding,
+        }
         if json_output:
             payload["response_format"] = {"type": "json_object"}
         request = urllib.request.Request(

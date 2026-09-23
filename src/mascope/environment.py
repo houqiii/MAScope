@@ -2,7 +2,10 @@ import json
 from copy import deepcopy
 from threading import RLock
 
+from .dataset import Task
 from .model import ResponseError
+
+ANSWER_FORMAT = "Your final answer must state the identifier of every passage it rests on, exactly as the passage was returned."
 
 
 class BudgetExceeded(RuntimeError):
@@ -13,7 +16,7 @@ class Environment:
     def __init__(self, dataset, task, model, token_budget=2000000, call_budget=256):
         if token_budget < 1 or call_budget < 1:
             raise ValueError("Budgets must be positive")
-        self.task = task
+        self.task = Task(task.task_id, task.query + "\n\n" + ANSWER_FORMAT)
         self._dataset = dataset
         self._model = model
         self._token_budget = token_budget
@@ -91,7 +94,7 @@ class Environment:
             call_id = self._event(
                 "model_start", phase=phase, agent_id=agent_id, messages=messages
             )
-            output_limit = min(max_tokens, self._token_budget - self._tokens)
+            output_limit = min(max_tokens, 4096, self._token_budget - self._tokens)
         try:
             reply = self._model.complete(messages, output_limit, json_output)
         except Exception as exc:
@@ -237,9 +240,14 @@ class Environment:
                     "status": status,
                     "error_type": error_type,
                     "model": getattr(self._model, "model", type(self._model).__name__),
+                    "decoding": getattr(self._model, "decoding", {}),
+                    "runtime_version": "1.2.0",
                     "answer": self._answer,
                     "events": self._events,
                     "usage": {
+                        "retrieval_calls": sum(
+                            e["kind"] in {"search", "fetch"} for e in self._events
+                        ),
                         "calls": self._calls,
                         "tokens": self._tokens if not self._unknown_usage else None,
                         "known_tokens": self._tokens,

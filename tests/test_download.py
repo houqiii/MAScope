@@ -50,6 +50,7 @@ def test_unpack_and_no_overwrite(tmp_path):
 
 def test_download_checks_digest_before_install(tmp_path, monkeypatch):
     import hashlib
+
     from mascope.download import download
 
     source = tmp_path / "source"

@@ -24,7 +24,7 @@ evaluator/
   references.jsonl
 ```
 
-`tasks.jsonl` contains only opaque task identifiers and natural-language queries. Each base instance has two equivalent formulations. `profiles.json` contains public specialist descriptions. Each file in `corpora` belongs to one specialist and contains source-linked records. The evaluator bundle holds family membership, taxonomy labels, information requirements, accepted evidence and selected dependencies.
+`tasks.jsonl` contains only opaque task identifiers and natural-language queries. Each base instance has two equivalent formulations. `profiles.json` contains public specialist descriptions. Each file in `corpora` belongs to one specialist and contains source-linked records. The evaluator bundle holds family membership, taxonomy labels, information requirements, accepted evidence and dependency graphs.
 
 ## Source retrieval
 
@@ -61,7 +61,7 @@ Task formulations and benchmark annotations are distributed under CC BY-SA 4.0. 
 | 8 | 204 |
 | **Total** | **2,766** |
 
-The release contains 11,018 required expertise assignments. A total of 662 question formulations receive additional, source-grounded requirements: 458 S1 queries gain one specialist and 204 S3 queries gain two. The nine taxonomy-cell counts, 499 family identifiers, two formulations per base instance and existing selected dependencies are preserved. The remaining 2,104 questions are unchanged.
+The release contains 11,018 required expertise assignments. A total of 662 question formulations receive additional, source-grounded requirements: 458 S1 queries gain one specialist and 204 S3 queries gain two. The nine taxonomy-cell counts, 499 family identifiers, two formulations per base instance and existing dependency annotations are preserved. The remaining 2,104 questions are unchanged.
 
 These are task and annotation revisions, not relabelings of existing runs. The 119 extended families were checked for source support and consistency: 111 received a separate model review, while eight were authored and inspected directly against the retrieved sources in the release preparation session. This is model-assisted validation, not a human annotation study. Source ownership, dependency graphs, paired annotations, counts and archive integrity are checked programmatically. Modified tasks require new method executions and evaluations.
 
@@ -85,7 +85,11 @@ requirements[]
   depends_on            Predecessor unit identifiers
   acceptable_evidence   Accepted source identifiers
   sources               Reference excerpts and source URLs
-dependency              Selected {from, to} edge, or null for C1
+dependency              Legacy selected edge; ignored by the whole-graph scorers
 ```
 
 References are evaluator inputs and must not be fed into method planning or member retrieval. Dataset manifests record the release version, counts and file checksums; run records include the version used for execution.
+
+## Scoring compatibility
+
+Version 1.1.0 contains 4,290 annotated edges in `requirements[].depends_on`. Code 1.2 evaluates all of them in explicit semantic mode. Its identifiers and claim annotations are not the frozen acceptance rules required by deterministic scoring. The schema 2.0 contract is described in [Reference format](reference-format.md); [Release compatibility](release-status.md) records the outstanding data requirements.

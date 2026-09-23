@@ -4,11 +4,12 @@ import os
 from pathlib import Path
 
 from .dataset import Dataset
+from .deterministic import DeterministicEvaluator
 from .download import download, fetch_sources
 from .evaluation import Evaluator, JudgeValidationError, aggregate
 from .model import OpenAICompatible
-from .runner import load_agent, run
 from .report import summarize_directories
+from .runner import load_agent, run
 
 
 def parser():
@@ -20,6 +21,8 @@ def parser():
     fetch.add_argument(
         "--component", choices=["runtime", "evaluator", "all"], default="all"
     )
+    validate = commands.add_parser("verify-references")
+    validate.add_argument("--annotations", required=True)
     sources = commands.add_parser("fetch-sources")
     sources.add_argument("--manifest", required=True)
     sources.add_argument("--dest", required=True)
@@ -40,15 +43,38 @@ def parser():
             command.add_argument("--token-budget", type=int, default=2000000)
             command.add_argument("--call-budget", type=int, default=256)
             command.add_argument("--resume", action="store_true")
+            command.add_argument("--seed", type=int)
         if name == "evaluate":
             command.add_argument("--annotations", required=True)
             command.add_argument("--runs", required=True)
-            command.add_argument("--judge-model", required=True)
+            command.add_argument("--judge-model")
+            command.add_argument(
+                "--scorer",
+                choices=["deterministic", "semantic"],
+                default="deterministic",
+            )
     return root
 
 
 def main():
     arguments = parser().parse_args()
+    if arguments.command == "verify-references":
+        evaluator = DeterministicEvaluator(arguments.annotations)
+        from .reference import dependency_edges
+
+        print(
+            json.dumps(
+                {
+                    "queries": len(evaluator.references),
+                    "edges": sum(
+                        len(dependency_edges(r)) for r in evaluator.references.values()
+                    ),
+                    "version": evaluator.manifest["version"],
+                },
+                indent=2,
+            )
+        )
+        return
     if arguments.command == "summarize":
         report = summarize_directories(arguments.evaluations)
         output = Path(arguments.out)
@@ -86,7 +112,7 @@ def main():
         for record in run(
             dataset,
             load_agent(arguments.agent),
-            OpenAICompatible(arguments.model, arguments.base_url),
+            OpenAICompatible(arguments.model, arguments.base_url, seed=arguments.seed),
             arguments.out,
             arguments.task_ids,
             arguments.token_budget,
@@ -103,10 +129,15 @@ def main():
                 )
             )
     elif arguments.command == "evaluate":
-        evaluator = Evaluator(
-            arguments.annotations,
-            OpenAICompatible(arguments.judge_model, arguments.base_url),
-        )
+        if arguments.scorer == "deterministic":
+            evaluator = DeterministicEvaluator(arguments.annotations)
+        else:
+            if not arguments.judge_model:
+                raise SystemExit("--scorer semantic requires --judge-model")
+            evaluator = Evaluator(
+                arguments.annotations,
+                OpenAICompatible(arguments.judge_model, arguments.base_url),
+            )
         tasks = (
             [dataset.task(x) for x in arguments.task_ids]
             if arguments.task_ids
@@ -150,6 +181,7 @@ def main():
             (output / (task.task_id + ".failed.json")).unlink(missing_ok=True)
         summary = aggregate(rows)
         summary["dataset_version"] = dataset.manifest["version"]
+        summary["scorer_version"] = rows[0]["scorer_version"]
         summary["task_ids"] = [task.task_id for task in tasks]
         (output / "summary.json").write_text(json.dumps(summary, indent=2))
         print(json.dumps(summary, indent=2))
