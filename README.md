@@ -29,8 +29,6 @@ The environment leaves recruitment, delegation, communication and synthesis to t
 
 This repository contains the benchmark runtime, evaluator, download tools and documentation. Agent methods are supplied by the user. Data archives are distributed separately.
 
-**Release compatibility:** the current v1.1.0 download supports execution and semantic evaluation. The deterministic whole-graph scorer requires frozen schema 2.0 references, which are not yet in that data release. See [release compatibility](docs/release-status.md) before reproducing measurements.
-
 ## What the measurements distinguish
 
 Recruiting a relevant expert does not establish that its finding was used. MAScope follows whether ready work is assigned, whether the assignment receives the necessary evidence, whether the member solves it, and whether synthesis retains that result. Outcome and cost remain visible alongside these stages, so improvements from extra computation or memory can be examined together with the collaboration they enable.
@@ -127,7 +125,7 @@ mascope evaluate \
   --out results/eval-1
 ```
 
-The command above evaluates the current data snapshot with the explicit semantic compatibility scorer. It records every dependency edge and aggregates a stage only when all edges pass. For frozen schema 2.0 references, omit `--scorer semantic` and `--judge-model` to use deterministic source-and-term matching without evaluator model calls. See [reference format](docs/reference-format.md) and [release compatibility](docs/release-status.md).
+The downloaded v1.1.0 bundle uses `--scorer semantic` with a configured judge model. The evaluator records every dependency edge and aggregates a stage only when all edges pass. Deterministic source-and-term matching is also available for separately supplied schema 2.0 references; those annotations are not included in the v1.1.0 download. See [Evaluation](docs/evaluation.md) and [Reference format](docs/reference-format.md).
 
 | Evaluation view | Reported measurements |
 | --- | --- |
@@ -166,7 +164,7 @@ src/mascope/
   deterministic.py       Source-and-term matching across the full graph
   reference.py           Annotation validation and expert-role matching
   construction.py        Source identifiers and certification-record checks
-  evaluation.py          Semantic compatibility scorer and capability metrics
+  evaluation.py          Semantic scoring and capability metrics
   report.py              Repeated-run summaries
   download.py            Verified archives and public source retrieval
   model.py               OpenAI-compatible model interface

@@ -55,4 +55,4 @@ The 2,766 questions contain two formulations of 1,383 base instances, grouped in
 
 Version 1.1.0 extends selected tasks and their supporting references to the 2–3 and 6–8 expertise ranges. Task and family identifiers remain stable, but modified questions and references require new runs. The runner and evaluator reject mismatched dataset versions. See [Data](data.md) for exact release statistics.
 
-The runtime and evaluation contract are documented separately from data-release readiness. See [Release compatibility](release-status.md) for the available snapshot and frozen-reference requirements.
+See [Data](data.md) for the downloadable snapshot and [Evaluation](evaluation.md) for scorer inputs and metric definitions.

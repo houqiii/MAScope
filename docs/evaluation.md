@@ -13,7 +13,7 @@ mascope evaluate \
   --out results/eval-1
 ```
 
-The default scorer makes no model calls. It requires schema 2.0 references with frozen source identifiers and term variants. It never infers missing terms, substitutes a model judge, or turns an invalid annotation into a failed task. The currently downloadable v1.1.0 annotations predate this contract; see [Release compatibility](release-status.md).
+The default scorer makes no model calls. Supply schema 2.0 references with frozen source identifiers and term variants as described in [Reference format](reference-format.md). The v1.1.0 download provides semantic-scoring annotations; schema 2.0 annotations must be supplied separately. Missing or invalid rules stop evaluation.
 
 Each unit has one or more acceptance alternatives. An alternative requires at least one of its exact source identifiers and at least one registered surface variant from **every** term group. The identifier and terms must occur in the submitted answer. Matching is literal and case-sensitive: case, inflection and quantity variants must be listed explicitly. Alternatives are evaluated independently; terms from one cannot be combined with the identifier of another. Match records contain the accepted identifier and the exact matched terms and offsets. Unregistered paraphrases are misses.
 
@@ -64,7 +64,7 @@ All model calls, including controller, member, synthesis and memory calls, go th
 
 Budget exhaustion retains any answer already submitted and its measured trajectory; no additional synthesis call is inserted. Other runtime errors score as unsuccessful while retaining their trace. Failed calls with missing provider usage leave token cost unknown. If any selected task has unknown usage, aggregate `mean_tokens` is `null`.
 
-## Semantic evaluation of the existing data snapshot
+## Semantic evaluation
 
 ```bash
 mascope evaluate \
@@ -73,7 +73,7 @@ mascope evaluate \
   --judge-model "$JUDGE_MODEL" --out results/semantic-eval-1
 ```
 
-This explicit compatibility mode uses source/trace validation and a configurable content judge for v1.1.0 references. It checks **every annotated edge**, but its outcome predicate and content decisions differ from deterministic acceptance. Correct unsupported content can satisfy a semantic outcome requirement without increasing supported coverage. Its results are marked `semantic-full-graph-2` and are not interchangeable with deterministic results or the earlier single-edge scorer.
+The semantic scorer uses source/trace validation and a configurable content judge for v1.1.0 references. It checks **every annotated edge**, but its outcome predicate and content decisions differ from deterministic acceptance. Correct unsupported content can satisfy a semantic outcome requirement without increasing supported coverage. Its results are marked `semantic-full-graph-2` and are not interchangeable with deterministic results or the earlier single-edge scorer.
 
 The judge must return every unit and every edge exactly once, five nested stage decisions per edge, and real event locators for positive stages. Invalid judgments receive validation feedback, at most three attempts; exhausted attempts produce `.failed.json` and stop evaluation. Judge usage is saved separately from execution cost.
 

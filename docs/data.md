@@ -90,6 +90,8 @@ dependency              Legacy selected edge; ignored by the whole-graph scorers
 
 References are evaluator inputs and must not be fed into method planning or member retrieval. Dataset manifests record the release version, counts and file checksums; run records include the version used for execution.
 
-## Scoring compatibility
+## Evaluation inputs
 
-Version 1.1.0 contains 4,290 annotated edges in `requirements[].depends_on`. Code 1.2 evaluates all of them in explicit semantic mode. Its identifiers and claim annotations are not the frozen acceptance rules required by deterministic scoring. The schema 2.0 contract is described in [Reference format](reference-format.md); [Release compatibility](release-status.md) records the outstanding data requirements.
+The v1.1.0 bundle contains 4,290 annotated edges in `requirements[].depends_on` across 1,630 dependent queries. The whole-graph evaluator checks all of these edges using `--scorer semantic --judge-model MODEL`. Solve-based dependency-certification records are not included in this release.
+
+Deterministic scoring accepts separately supplied schema 2.0 references containing frozen source identifiers, acceptance terms, surface variants, objective terms and constraint terms. These annotations are not part of the v1.1.0 download. See [Reference format](reference-format.md) for the schema and [Evaluation](evaluation.md) for commands and scoring definitions.
