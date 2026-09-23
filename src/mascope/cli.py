@@ -83,10 +83,6 @@ def main():
         print(json.dumps(report, indent=2))
         return
     if arguments.command == "download":
-        if not arguments.base_url:
-            raise SystemExit(
-                "Provide --base-url or set MASCOPE_DATA_URL to the data release directory"
-            )
         names = (
             ["runtime", "evaluator"]
             if arguments.component == "all"

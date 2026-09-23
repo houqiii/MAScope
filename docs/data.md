@@ -1,16 +1,19 @@
 # Data
 
-The fixed benchmark snapshot is available from the [v1.1.0 GitHub Release](https://github.com/houqiii/MAScope/releases/tag/v1.1.0).
+Download the fixed v1.1.0 benchmark snapshot using the packaged downloader. No login or access token is required.
 
 ```bash
-export MASCOPE_DATA_URL="https://github.com/houqiii/MAScope/releases/download/v1.1.0"
-mascope download --base-url "$MASCOPE_DATA_URL" --dest data
+mascope download --dest data
 mascope verify --runtime data/runtime
 ```
 
 ## Release layout
 
-The release manifest packaged with the software specifies archive filenames, byte sizes and SHA-256 checksums. Supply the directory that hosts these archives with `--base-url` or `MASCOPE_DATA_URL`. HTTP, HTTPS and local `file://` directories are supported.
+The packaged release manifest pins each archive by its asset URL, filename, byte size and SHA-256 checksum. The default download uses GitHub asset identifiers and requests the archive bytes directly. It does not depend on a Release-page link being supported by a source-code mirror.
+
+To use a different archive mirror, supply its directory URL with `--base-url` or `MASCOPE_DATA_URL`. HTTP, HTTPS and local `file://` directories are supported. Use `--component runtime` or `--component evaluator` to download one bundle.
+
+When reading an anonymous source mirror, run the same `mascope download --dest data` command. The Data navigation link points to this repository-local guide. The downloader also recognizes Release URLs rewritten under `anonymous.4open.science/r/` and uses the pinned asset URLs for those inputs.
 
 ```text
 runtime/

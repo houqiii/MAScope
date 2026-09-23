@@ -5,7 +5,7 @@
 
 <p align="center">
   <a href="assets/MAScope.pdf">Paper</a> ·
-  <a href="https://github.com/houqiii/MAScope/releases/tag/v1.1.0">Data</a> ·
+  <a href="docs/data.md">Data</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="docs/benchmark.md">Benchmark</a> ·
   <a href="docs/integration.md">Integration</a> ·
@@ -64,16 +64,15 @@ The runtime uses the Python standard library and an OpenAI-compatible chat-compl
 
 ### 2. Download the data
 
-Download the fixed [v1.1.0 data release](https://github.com/houqiii/MAScope/releases/tag/v1.1.0) and verify it:
+Download the fixed v1.1.0 data bundles and verify them:
 
 ```bash
-export MASCOPE_DATA_URL="https://github.com/houqiii/MAScope/releases/download/v1.1.0"
-mascope download --base-url "$MASCOPE_DATA_URL" --dest data
+mascope download --dest data
 mascope verify --runtime data/runtime
 mascope list --runtime data/runtime
 ```
 
-The code release pins archive sizes and SHA-256 checksums. The runtime bundle contains questions, public profiles and member corpora. The evaluator bundle contains the matching references and stays outside the method's inputs. See [Data and downloads](docs/data.md) for component selection, source retrieval and release details.
+The downloader uses the bundled asset URLs and verifies archive sizes and SHA-256 checksums. No GitHub account or access token is required. The runtime bundle contains questions, public profiles and member corpora. The evaluator bundle contains the matching references and stays outside the method's inputs. See [Data and downloads](docs/data.md) for component selection, source retrieval and release details.
 
 The underlying Stack Exchange posts are publicly accessible. To refresh their source records independently:
 

@@ -71,3 +71,61 @@ def test_download_checks_digest_before_install(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="checksum"):
         download(source.as_uri(), tmp_path / "bad")
     assert not (tmp_path / "bad").exists()
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [None, "https://anonymous.4open.science/r/MAScope-7B76/releases/download/v1.1.0"],
+)
+def test_default_and_anonymous_download_use_pinned_asset(
+    tmp_path, monkeypatch, base_url
+):
+    import hashlib
+
+    from mascope.download import download
+
+    path = tmp_path / "bundle.tar.gz"
+    archive(path, "runtime/manifest.json")
+    data = path.read_bytes()
+    item = {
+        "filename": "runtime.tar.gz",
+        "size": len(data),
+        "sha256": hashlib.sha256(data).hexdigest(),
+        "url": "https://api.github.com/repositories/123/releases/assets/456",
+    }
+    monkeypatch.setattr(
+        "mascope.download.release_manifest", lambda: {"components": {"runtime": item}}
+    )
+    requests = []
+
+    def open_url(request, timeout):
+        requests.append(request)
+        return io.BytesIO(data)
+
+    monkeypatch.setattr("urllib.request.urlopen", open_url)
+    download(base_url, tmp_path / "installed")
+    assert requests[0].full_url == item["url"]
+    assert requests[0].get_header("Accept") == "application/octet-stream"
+    assert requests[0].get_header("Authorization") is None
+    assert (tmp_path / "installed/runtime/manifest.json").is_file()
+
+
+def test_default_download_rejects_metadata_response(tmp_path, monkeypatch):
+    from mascope.download import download
+
+    metadata = b'{"message":"not archive bytes"}'
+    item = {
+        "filename": "runtime.tar.gz",
+        "size": len(metadata),
+        "sha256": "0" * 64,
+        "url": "https://api.github.com/repositories/123/releases/assets/456",
+    }
+    monkeypatch.setattr(
+        "mascope.download.release_manifest", lambda: {"components": {"runtime": item}}
+    )
+    monkeypatch.setattr(
+        "urllib.request.urlopen", lambda *args, **kwargs: io.BytesIO(metadata)
+    )
+    with pytest.raises(ValueError, match="checksum"):
+        download(destination=tmp_path / "installed")
+    assert not (tmp_path / "installed").exists()
