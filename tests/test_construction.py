@@ -108,3 +108,78 @@ def test_reach_records_failure_without_inventing_rank(tmp_path):
     )
     assert result["rank_without"] == 1
     assert not result["passed"]
+
+
+def test_downstream_question_is_visible_source_context(tmp_path):
+    import json
+
+    from mascope.dataset import Corpus
+
+    units, corpora = candidates(tmp_path)
+    path = tmp_path / "b.jsonl"
+    rows = [json.loads(line) for line in path.open()]
+    rows[0]["question"] = "This request already states 30 ms."
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    corpora["b"] = Corpus(path, "b")
+    result = certify_dependencies(["request symptoms"], units, corpora)
+    assert result["edges"] == []
+
+
+def test_binding_rejects_term_present_in_downstream_question():
+    from mascope.construction import bind_terms
+
+    units = [
+        {"id": "a", "sources": [{"text": "limit 30 ms"}]},
+        {
+            "id": "b",
+            "sources": [{"question": "already known: 30 ms", "text": "response"}],
+        },
+    ]
+    result = bind_terms("a", "b", [["30 ms"]], units, ["review symptoms"])
+    assert not result["passed"]
+    assert result["checks"][0]["suppliers"] == ["a", "b"]
+
+
+def test_family_validation_recomputes_graph_similarity_and_discovery(tmp_path):
+    from mascope.dataset import Task
+    from mascope.validation import recompute_families
+
+    units, corpora = candidates(tmp_path)
+    units[0]["depends_on"] = []
+    units[1]["depends_on"] = ["a"]
+
+    class Dataset:
+        def profiles(self):
+            return [
+                {"agent_id": "a", "tags": ["other"]},
+                {"agent_id": "b", "tags": ["blue_token"]},
+                {"agent_id": "c", "tags": ["request"]},
+            ]
+
+        def corpus(self, agent):
+            return corpora[agent]
+
+        def task(self, task_id):
+            return Task(task_id, "request symptoms", "f")
+
+    references = [
+        {
+            "task_id": f"q{i}",
+            "family_id": "f",
+            "cell": "C3S1",
+            "requirements": units,
+            "required_experts": ["a", "b"],
+            "status": "uncertified",
+        }
+        for i in range(3)
+    ]
+    row = recompute_families(Dataset(), references)[0]
+    assert row["graph_matched"] and row["discovery_passed"]
+    assert row["similarity_pairs"] == row["similarity_violations"] == 3
+    assert row["derived_edges"] == [("a", "b")]
+    units[1]["depends_on"] = []
+    for reference in references:
+        reference["status"] = "certified"
+    row = recompute_families(Dataset(), references)[0]
+    assert not row["graph_matched"]
+    assert not row["discovery_passed"]

@@ -1,27 +1,30 @@
 # Data
 
-Download the versioned archives without a login or access token:
-
-```bash
-mascope download --dest data
-mascope verify --runtime data/runtime
-mascope verify-references --annotations data/evaluator
-```
-
 ## Release status
 
-Version 2.0.0 is a reconstructed candidate. It contains 2,766 queries in 499 families, 11,018 unit occurrences and 3,664 declared dependency edges. Query families, expert-count distributions and graph structures match the included inventory specification.
+| Field | Version 2.0.0 |
+| --- | ---: |
+| Release | Draft |
+| Public archive downloads | Not published |
+| Queries | 2,766 |
+| Families | 499 |
+| Required unit occurrences | 11,018 |
+| Annotated dependency edges | 3,664 |
+| Edge occurrences with a reproduced certified family graph | 0 |
+| C3 families passing the profile-ranking condition | 13 / 126 |
+| Source pairs | 126,566 |
+| Source pairs with complete question bodies | 0 |
+| Units with ten local-solvability samples | 0 / 1,994 |
+| Within-family query pairs at or above 0.90 MinHash similarity | 122 |
 
-Certification records contain measured BM25 ranks. Twelve edge-query checks pass individually; six edge occurrences in one family also pass the complete family gate. The other 3,658 edge occurrences require recomposition. The archive contains 126,566 source pairs across 51 corpora. Local-solvability sampling is pending for all 1,994 family-unit occurrences, and 112 within-family query pairs exceed the 0.90 MinHash threshold. Frozen acceptance rules and offline query compositions still require content review. These records support auditing and development; they do not establish a fully certified benchmark or reproduce experimental results.
-
-The evaluator bundle includes `release_status.json`, per-edge checks, similarity records and discovery rankings. Recompute the inventory and inspect validation failures with:
+Run the checks against the runtime and matching evaluator directories:
 
 ```bash
 mascope verify --runtime data/runtime --annotations data/evaluator \
   --paper data/evaluator/paper_record.json --out run_manifest.json
 ```
 
-This command exits nonzero if a required property fails. Pending local-solvability coverage is reported separately. `verify-references` checks schema, checksums and family consistency; it does not certify task validity.
+This command recomputes family graphs, query similarities and profile rankings from the current files, validates corpus counts and question fields, and checks archive hashes. A failed requirement produces a nonzero exit status. Local-solvability coverage is reported separately. `verify-references` validates the annotation schema and family consistency.
 
 ## Archive layout
 
@@ -51,7 +54,7 @@ evaluator/
 
 The public task envelope contains `task_id`, `family_id` and `query`. Families have 3–7 queries sharing units, expert requirements and a dependency graph. S1 requires 2–3 experts, S2 4–5, and S3 6–8. References and construction records remain outside method inputs.
 
-The migration retained 1,256 questions, rewrote 1,361, retired 149 and added 149. Family mapping used cell and expert-count constraints. All retained corpus passages received keyed identifiers; the private key and old-to-new mapping are not distributed. `changes.jsonl` records individual query actions. Construction funnel summaries are labeled with their provenance, rather than presented as observed execution logs.
+Source identifiers are keyed and frozen with the data. Construction keys and identifier maps remain private.
 
 ## Downloads and mirrors
 
@@ -74,6 +77,6 @@ Omit `--site` to fetch all communities. The command uses the public Stack Exchan
 
 ## Licenses
 
-Source content retains its applicable Stack Exchange license and post links. Contributor attribution is included in each archive as `attribution.jsonl` and is omitted from agent-visible retrieval results. Keep attribution, post URLs and license records when redistributing either archive..
+Source content retains its applicable Stack Exchange license and post links. Contributor attribution is included in each archive as `attribution.jsonl` and is omitted from agent-visible retrieval results. Keep attribution, post URLs and license records when redistributing either archive.
 
 Task formulations and annotations are CC BY-SA 4.0. Each archive includes `DATA_LICENSE.txt`. The software's MIT license does not relicense third-party source content.

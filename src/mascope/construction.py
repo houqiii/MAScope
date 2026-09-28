@@ -21,6 +21,10 @@ def source_identifier(key, community, post, unit_index):
     )
 
 
+def _source_text(source):
+    return " ".join(source.get(field, "") for field in ("title", "question", "text"))
+
+
 def certify_dependencies(queries, units, corpora):
     from .reference import fingerprint, validate_terms
 
@@ -43,7 +47,7 @@ def certify_dependencies(queries, units, corpora):
         ):
             raise ValueError("Accepted sources must exist in their owning corpora")
         source_texts[unit["id"]] = "\n".join(
-            r["title"] + " " + r["text"] for _, r in passages[unit["id"]]
+            _source_text(r) for _, r in passages[unit["id"]]
         )
         if not unit.get("finding") or not unit.get("objective"):
             raise ValueError("Freeze a finding and objective for every candidate unit")
@@ -197,7 +201,7 @@ def bind_terms(source_id, target_id, groups, units, queries):
     if source_id == target_id or source_id not in lookup or target_id not in lookup:
         raise ValueError("Invalid binding endpoints")
     sources = {
-        key: "\n".join(s["text"] for s in unit["sources"])
+        key: "\n".join(_source_text(s) for s in unit["sources"])
         for key, unit in lookup.items()
     }
     checks = []

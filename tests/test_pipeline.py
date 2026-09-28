@@ -32,7 +32,7 @@ def test_corpus_filter_dedup_score_and_uniform_cap():
     assert minhash(text) == minhash(text)
 
 
-def test_release_does_not_promote_reconstructed_counts_to_certification():
+def test_release_requires_frozen_family_gates():
     with pytest.raises(ValueError, match="Only frozen"):
         release_gate(
             [{"family_id": "f", "disposition": "return_to_composition", "cell": "C2S1"}]

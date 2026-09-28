@@ -59,7 +59,7 @@ An accepted source identifier has prefix `MS-` and twelve Crockford base-32 char
 
 Certification checks:
 
-1. Each acceptance term absent from the questions and downstream sources has exactly one supplying unit.
+1. Each acceptance term absent from the public queries and downstream source context (question, title and accepted answer) has exactly one supplying unit.
 2. Every downstream source and equivalent is outside the top eight for the query battery without that supplier, and reachable with its finding.
 3. All family queries pass and the resulting graph is acyclic.
 
@@ -74,4 +74,4 @@ The first command validates rules, checksums and families. The second additional
 
 `bind_terms(source_id, target_id, groups, units, queries)` checks literal supplier uniqueness and absence from queries. `reach(corpus, evidence_ids, query_group, predecessor_finding)` returns real ranks both with and without the predecessor and records a failed check without replacing ranks with target values. `certify_group` is the strict family gate and rejects a group if any check fails.
 
-The v2 candidate also includes `certification/edges.jsonl` with measured ranks and a status for every declared edge. A graph entry is not by itself proof of certification. `certification/returns.jsonl` identifies the provenance of construction summaries; summaries imported from a construction record are distinguished from observed run logs.
+`certification/edges.jsonl` stores per-edge measurements. `certification/returns.jsonl` stores construction records and their provenance. Full verification derives family graphs from the current queries, frozen rules and runtime corpora; stored status labels are not used as certification decisions.

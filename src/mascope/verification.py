@@ -1,9 +1,12 @@
 import collections
 import json
 import re
+import statistics
 from pathlib import Path
 
+from .construction import _source_text
 from .dataset import Dataset, read_json, read_jsonl, sha256
+from .validation import recompute_families
 from .reference import dependency_edges, fingerprint, validate_reference
 
 
@@ -184,7 +187,7 @@ def verify_paper(runtime, annotations, paper, output):
                 u["id"]
                 for u in units.values()
                 if any(
-                    v in "\n".join(s.get("text", "") for s in u["sources"])
+                    v in "\n".join(_source_text(s) for s in u["sources"])
                     for v in variants
                 )
             ]
@@ -204,12 +207,24 @@ def verify_paper(runtime, annotations, paper, output):
     check("unique_bound_suppliers", binding, len(expected_edges))
     check("rank_with_top8", reached, len(expected_edges))
     check("rank_without_outside_top8", unreachable, len(expected_edges))
+    recomputed = recompute_families(dataset, refs)
+    check(
+        "certified_family_graphs",
+        sum(r["graph_matched"] for r in recomputed),
+        len(families),
+    )
     check(
         "certified_edges",
-        sum(r.get("status") == "certified" for r in cert),
+        sum(
+            len(r["declared_edges"]) * r["query_count"]
+            for r in recomputed
+            if r["graph_matched"]
+        ),
         spec["certified_edges"],
     )
     corpus_count = 0
+    corpus_sizes = []
+    complete_questions = 0
     corpus_ids = {}
     invalid_ids = 0
     over_cap = []
@@ -218,6 +233,10 @@ def verify_paper(runtime, annotations, paper, output):
         count = 0
         for record in read_jsonl(Path(runtime) / "corpora" / (agent + ".jsonl")):
             count += 1
+            complete_questions += (
+                isinstance(record.get("question"), str)
+                and len(record["question"].split()) >= 80
+            )
             evidence = record["evidence_id"]
             invalid_ids += (
                 re.fullmatch(r"MS-[0123456789ABCDEFGHJKMNPQRSTVWXYZ]{12}", evidence)
@@ -227,10 +246,26 @@ def verify_paper(runtime, annotations, paper, output):
             )
             corpus_ids[evidence] = agent
         corpus_count += count
+        corpus_sizes.append(count)
         if count > spec["runtime"]["corpus_cap_pairs"]:
             over_cap.append(agent)
     check("corpus_identifier_ownership", invalid_ids, 0)
     check("corpus_size_cap", over_cap, [])
+    check("corpus_complete_questions", complete_questions, corpus_count)
+    check("corpus_pairs", corpus_count, spec["runtime"].get("corpus_pairs", 766930))
+    check(
+        "corpus_median",
+        statistics.median(corpus_sizes),
+        spec["runtime"].get("corpus_median", 18271),
+    )
+    check(
+        "corpus_minimum", min(corpus_sizes), spec["runtime"].get("corpus_minimum", 3247)
+    )
+    check(
+        "corpora_at_cap",
+        sum(n == spec["runtime"]["corpus_cap_pairs"] for n in corpus_sizes),
+        spec["runtime"].get("corpora_at_cap", 23),
+    )
     check(
         "reference_sources_in_runtime",
         sum(
@@ -252,7 +287,7 @@ def verify_paper(runtime, annotations, paper, output):
     )
     check(
         "query_similarity_below_threshold",
-        sum(r["minhash_similarity"] >= 0.9 for r in similarities),
+        sum(r["similarity_violations"] for r in recomputed),
         0,
     )
     discovery_path = root / "discovery.jsonl"
@@ -262,16 +297,17 @@ def verify_paper(runtime, annotations, paper, output):
         len({(r["task_id"], r["from"], r["to"]) for r in discovery} & expected_edges),
         len(expected_edges),
     )
-    discovery_families = set()
-    for fid, group in families.items():
-        if group[0]["cell"].startswith("C3") and all(
-            any(d["task_id"] == q["task_id"] and d["passed"] for d in discovery)
-            for q in group
-        ):
-            discovery_families.add(fid)
+    check(
+        "C3.discovery_profile_checks",
+        sum(r["cell"].startswith("C3") and r["discovery_passed"] for r in recomputed),
+        spec["expert_discovery"]["C3_families"],
+    )
     check(
         "C3.discovery_verified_families",
-        len(discovery_families),
+        sum(
+            r["cell"].startswith("C3") and r["graph_matched"] and r["discovery_passed"]
+            for r in recomputed
+        ),
         spec["expert_discovery"]["C3_families"],
     )
     solpath = root / "local_solvability.jsonl"
@@ -306,6 +342,7 @@ def verify_paper(runtime, annotations, paper, output):
         "failed": sum(c["status"] == "FAIL" for c in checks),
         "checks": checks,
         "corpus_pairs": corpus_count,
+        "recomputed_families": recomputed,
         "local_solvability_coverage": coverage,
         "certification_summary": {
             "declared_edges": len(expected_edges),

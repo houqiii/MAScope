@@ -37,6 +37,6 @@ records = [
 ]
 ```
 
-The shipped tests verify these payload contracts and preservation of visible inputs for all twelve mappings. Bindings to particular framework-native logger versions remain pending; the hook names are MAScope instrumentation names, not claims about unmodified vendor log formats. Each method's `config.json` records this separately as `native_revision` and `fixture_verified`.
+The hook names are instrumentation contracts. Each method's `config.json` records `native_revision` and `fixture_verified`; framework-version bindings are currently unset. The tests validate payload conversion and preservation of visible inputs.
 
 Configuration records specify GoA's eight slots with repeated experts allowed, MAD's two rounds and majority vote, SelfOrg's 51 agents/top-2/three-round limit, MoA's three layers, and disabled cross-query memory for AgentNet. These describe the adapter's intended execution context, not an included implementation of those algorithms.

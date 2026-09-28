@@ -22,7 +22,7 @@ An agent is a Python callable `solve(environment)` that returns a final-answer s
 
 `ask` accepts contribution IDs or previously returned contribution objects in `inputs`. These inputs are delivered to the receiving member and recorded verbatim. `send` records a communication event; the caller controls when the recipient acts and which messages it receives. Pass the required contributions through `ask(inputs=...)` or include the message contents in the next `complete` call.
 
-`search` ranks question and accepted-answer text using BM25 (k1 = 0.9, b = 0.4), returning the top eight by default. Text is lowercased and tokenized with `[a-z0-9_+#.-]{2,}`; each distinct query term contributes once. Ties, including zero-score ties, are ordered by evidence identifier. Tags do not receive extra weight. Each record contains an evidence identifier, title, tags, text and source URL. Search never exposes another member's corpus.
+`search` ranks question and accepted-answer text using BM25 (k1 = 0.9, b = 0.4), returning the top eight by default. Text is lowercased and tokenized with `[a-z0-9_+#.-]{2,}`; each distinct query term contributes once. Ties, including zero-score ties, are ordered by evidence identifier. Tags do not receive extra weight. The dataset record retains source metadata. Environment retrieval exposes the identifier, question and accepted-answer text. Search never exposes another member's corpus.
 
 ## Custom specialist execution
 

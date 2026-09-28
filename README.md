@@ -29,7 +29,7 @@ The environment leaves recruitment, delegation, communication and synthesis to t
 
 The installed benchmark provides the 51 site-agent wrappers, task loading and evaluation. Twelve optional log adapters are listed separately under [`adapters/`](adapters/README.md); they are not imported, registered or executed by the environment. Method implementations are supplied by the user. Data archives are distributed separately.
 
-The v2.0.0 data release is a reconstructed candidate with per-edge retrieval audits and explicit pending validation records. See [release status](docs/data.md#release-status) before interpreting its task or dependency scores.
+Data version **2.0.0 is a draft**. Archive availability and validation results are listed in [Data](docs/data.md#release-status).
 
 ## What the measurements distinguish
 
@@ -66,7 +66,7 @@ The runtime uses the Python standard library and an OpenAI-compatible chat-compl
 
 ### 2. Download the data
 
-Download and verify the versioned archives:
+Once the versioned archives are published, download and verify them:
 
 ```bash
 mascope download --dest data
@@ -74,7 +74,7 @@ mascope verify --runtime data/runtime
 mascope list --runtime data/runtime
 ```
 
-The downloader uses the bundled asset URLs and verifies archive sizes and SHA-256 checksums. No GitHub account or access token is required. The runtime bundle contains questions, public profiles and member corpora. The evaluator bundle contains the matching references and stays outside the method's inputs. See [Data and downloads](docs/data.md) for component selection, source retrieval and release details.
+The downloader uses the bundled asset URLs and verifies archive sizes and SHA-256 checksums. Public release assets require no GitHub account or access token. The runtime bundle contains questions, public profiles and member corpora. The evaluator bundle contains the matching references and stays outside the method's inputs. See [Data and downloads](docs/data.md) for component selection, source retrieval and release details.
 
 The underlying Stack Exchange posts are publicly accessible. To refresh their source records independently:
 
