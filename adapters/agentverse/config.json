@@ -1,0 +1,18 @@
+{
+  "order": "7",
+  "method": "AgentVerse",
+  "display": "AgentVerse",
+  "class": "semi",
+  "team_rule": "recruiter staffs a team each round",
+  "structure": "recruit, decide, act, evaluate, then repeat",
+  "stop_rule": "the evaluator declines another round",
+  "mapping": {
+    "method": "AgentVerse",
+    "recruit": "a role staffed in the recruit stage",
+    "assign": "an action fixed in the decide stage, one per acting agent",
+    "aggregate": "the evaluate stage's merged verdict",
+    "submit": "the evaluator accepting the result"
+  },
+  "native_revision": null,
+  "fixture_verified": true
+}

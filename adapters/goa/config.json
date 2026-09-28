@@ -1,0 +1,20 @@
+{
+  "order": "10",
+  "method": "GoA",
+  "display": "GoA",
+  "class": "decentral",
+  "team_rule": "a meta-LLM fills eight node slots from the profiles, repeats allowed",
+  "structure": "peer-scored graph; responses pass source to target and back",
+  "stop_rule": "the backward pass ends and the pooled response returns",
+  "mapping": {
+    "method": "GoA",
+    "recruit": "a node the meta-LLM samples from the profiles",
+    "assign": "the source-to-target or target-to-source prompt that hands a node its neighbours' responses, weighted by their scores",
+    "aggregate": "the pooling step: the top source's refined response or the meta-LLM's weighted synthesis",
+    "submit": "the pooled response"
+  },
+  "node_slots": 8,
+  "repeated_experts": true,
+  "native_revision": null,
+  "fixture_verified": true
+}

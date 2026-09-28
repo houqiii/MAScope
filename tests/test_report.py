@@ -19,7 +19,7 @@ def rows():
         "expert_hits": 2,
         "required_experts": 2,
         "recruited_experts": 3,
-        "stages": [True] * 5,
+        "edge_judgments": [{"from": "a", "to": "b", "stages": [True] * 5}],
         "calls": 4,
         "tokens": 100,
     }
@@ -30,7 +30,9 @@ def rows():
             "task_id": "task_b",
             "cell": "C3S3",
             "success": 0,
-            "stages": [True, True, True, False, False],
+            "edge_judgments": [
+                {"from": "a", "to": "b", "stages": [True, True, True, False, False]}
+            ],
             "tokens": 300,
         },
     ]

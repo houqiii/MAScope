@@ -1,0 +1,21 @@
+{
+  "order": "9",
+  "method": "MAD",
+  "display": "MAD",
+  "class": "semi",
+  "team_rule": "every agent debates; no staffing step",
+  "structure": "two rounds; each agent sees every other answer before revising",
+  "stop_rule": "the round-two answers are put to a majority vote",
+  "mapping": {
+    "method": "MAD",
+    "recruit": "every agent of the pool, which answers the query in round one",
+    "assign": "the round-two prompt to an agent, carrying every other agent's round-one answer",
+    "aggregate": "the majority vote over the round-two answers",
+    "submit": "the answer the vote selects"
+  },
+  "rounds": 2,
+  "selection": "majority_vote",
+  "reference": "Du et al.",
+  "native_revision": null,
+  "fixture_verified": true
+}

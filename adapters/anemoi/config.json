@@ -1,0 +1,18 @@
+{
+  "order": "6",
+  "method": "Anemoi",
+  "display": "Anemoi",
+  "class": "semi",
+  "team_rule": "the planner adds experts to its thread",
+  "structure": "agents talk directly in the thread; the plan is revised there",
+  "stop_rule": "the participants approve a candidate and the answer agent submits",
+  "mapping": {
+    "method": "Anemoi",
+    "recruit": "an agent the planner adds to the thread",
+    "assign": "a plan item, or a message addressed to the agent in the thread, which it reads in full",
+    "aggregate": "the participants' consensus vote on a candidate answer",
+    "submit": "the answer-finding agent's submission"
+  },
+  "native_revision": null,
+  "fixture_verified": true
+}

@@ -1,19 +1,29 @@
 # Data
 
-Download the fixed v1.1.0 benchmark snapshot using the packaged downloader. No login or access token is required.
+Download the versioned archives without a login or access token:
 
 ```bash
 mascope download --dest data
 mascope verify --runtime data/runtime
+mascope verify-references --annotations data/evaluator
 ```
 
-## Release layout
+## Release status
 
-The packaged release manifest pins each archive by its asset URL, filename, byte size and SHA-256 checksum. The default download uses GitHub asset identifiers and requests the archive bytes directly. It does not depend on a Release-page link being supported by a source-code mirror.
+Version 2.0.0 is a reconstructed candidate. It contains 2,766 queries in 499 families, 11,018 unit occurrences and 3,664 declared dependency edges. Query families, expert-count distributions and graph structures match the included inventory specification.
 
-To use a different archive mirror, supply its directory URL with `--base-url` or `MASCOPE_DATA_URL`. HTTP, HTTPS and local `file://` directories are supported. Use `--component runtime` or `--component evaluator` to download one bundle.
+Certification records contain measured BM25 ranks. Twelve edge-query checks pass individually; six edge occurrences in one family also pass the complete family gate. The other 3,658 edge occurrences require recomposition. The archive contains 126,566 source pairs across 51 corpora. Local-solvability sampling is pending for all 1,994 family-unit occurrences, and 112 within-family query pairs exceed the 0.90 MinHash threshold. Frozen acceptance rules and offline query compositions still require content review. These records support auditing and development; they do not establish a fully certified benchmark or reproduce experimental results.
 
-When reading an anonymous source mirror, run the same `mascope download --dest data` command. The Data navigation link points to this repository-local guide. The downloader also recognizes Release URLs rewritten under `anonymous.4open.science/r/` and uses the pinned asset URLs for those inputs.
+The evaluator bundle includes `release_status.json`, per-edge checks, similarity records and discovery rankings. Recompute the inventory and inspect validation failures with:
+
+```bash
+mascope verify --runtime data/runtime --annotations data/evaluator \
+  --paper data/evaluator/paper_record.json --out run_manifest.json
+```
+
+This command exits nonzero if a required property fails. Pending local-solvability coverage is reported separately. `verify-references` checks schema, checksums and family consistency; it does not certify task validity.
+
+## Archive layout
 
 ```text
 runtime/
@@ -21,80 +31,49 @@ runtime/
   tasks.jsonl
   profiles.json
   sources.json
-  corpora/
+  attribution.jsonl
+  corpora/<site>.jsonl
+  prompts/{expert,answer_format}.txt
 evaluator/
   manifest.json
   references.jsonl
+  families.jsonl
+  certification/{edges,returns}.jsonl
+  certification/summary.json
+  local_solvability.jsonl
+  discovery.jsonl
+  query_similarity.jsonl
+  changes.jsonl
+  attribution.jsonl
+  paper_record.json
+  release_status.json
 ```
 
-`tasks.jsonl` contains only opaque task identifiers and natural-language queries. Each base instance has two equivalent formulations. `profiles.json` contains public specialist descriptions. Each file in `corpora` belongs to one specialist and contains source-linked records. The evaluator bundle holds family membership, taxonomy labels, information requirements, accepted evidence and dependency graphs.
+The public task envelope contains `task_id`, `family_id` and `query`. Families have 3–7 queries sharing units, expert requirements and a dependency graph. S1 requires 2–3 experts, S2 4–5, and S3 6–8. References and construction records remain outside method inputs.
+
+The migration retained 1,256 questions, rewrote 1,361, retired 149 and added 149. Family mapping used cell and expert-count constraints. All retained corpus passages received keyed identifiers; the private key and old-to-new mapping are not distributed. `changes.jsonl` records individual query actions. Construction funnel summaries are labeled with their provenance, rather than presented as observed execution logs.
+
+## Downloads and mirrors
+
+The packaged release manifest pins archive byte sizes and SHA-256 hashes. Asset URLs use stable numeric GitHub identifiers. The downloader requests archive bytes directly, so it does not require source mirrors to implement GitHub Release pages.
+
+Use `--component runtime` or `--component evaluator` for one bundle. To select a mirror, pass `--base-url` or set `MASCOPE_DATA_URL` to an HTTP(S) or local `file://` directory containing the pinned filenames. The same `mascope download --dest data` command works from an anonymous source snapshot that includes the current release manifest.
+
+Version 1.1.0 remains available as a legacy schema 1.0 release. Its references support only the explicit semantic scorer. They cannot be substituted for schema 2.0 references.
 
 ## Source retrieval
 
-The runtime bundle includes a source manifest identifying each source answer and its community. Fetch current source records independently:
+Refresh public source posts independently:
 
 ```bash
-mascope fetch-sources \
-  --manifest data/runtime/sources.json \
-  --dest data/source-posts \
-  --site stackoverflow
+mascope fetch-sources --manifest data/runtime/sources.json \
+  --dest data/source-posts --site stackoverflow
 ```
 
-Omit `--site` to fetch all communities. The command uses the public [Stack Exchange answers API](https://api.stackexchange.com/docs/answers-by-ids) in batches of up to 100 IDs. Set `STACKEXCHANGE_API_KEY` if available. Quota exhaustion stops the download; rerunning resumes from saved evidence IDs. Missing or removed posts are reported rather than replaced.
-
-Downloaded source records retain the answer owner's public attribution, source URL, available license metadata and revision timestamps. Source text may change over time. Live source retrieval therefore produces a current-source corpus; it does not reproduce the archived text byte-for-byte or create the benchmark's authored task annotations.
+Omit `--site` to fetch all communities. The command uses the public Stack Exchange answers API in batches of up to 100 IDs. `STACKEXCHANGE_API_KEY` is optional. Quota exhaustion stops the download; rerunning resumes saved evidence IDs. Removed posts are reported. Live source retrieval does not recreate authored benchmark questions or frozen annotations, and source text may have changed since the archived snapshot.
 
 ## Licenses
 
-Source question-and-answer content retains the applicable Stack Exchange content license. License versions depend on contribution and revision dates; consult the [source licensing information](https://stackoverflow.com/help/licensing) and linked post histories. The original contributors remain credited through the source records and post links. Extracted excerpts are marked in the distributed source records.
+Source content retains its applicable Stack Exchange license and post links. Contributor attribution is included in each archive as `attribution.jsonl` and is omitted from agent-visible retrieval results. Keep attribution, post URLs and license records when redistributing either archive..
 
-The software MIT license does not relicense source content. Keep source attribution and license information when redistributing a corpus.
-
-Task formulations and benchmark annotations are distributed under CC BY-SA 4.0. Each archive includes `DATA_LICENSE.txt`.
-
-## Version 1.1.0
-
-| Required experts per query | Queries |
-| --- | ---: |
-| 2 | 686 |
-| 3 | 458 |
-| 4 | 928 |
-| 5 | 12 |
-| 6 | 478 |
-| 8 | 204 |
-| **Total** | **2,766** |
-
-The release contains 11,018 required expertise assignments. A total of 662 question formulations receive additional, source-grounded requirements: 458 S1 queries gain one specialist and 204 S3 queries gain two. The nine taxonomy-cell counts, 499 family identifiers, two formulations per base instance and existing dependency annotations are preserved. The remaining 2,104 questions are unchanged.
-
-These are task and annotation revisions, not relabelings of existing runs. The 119 extended families were checked for source support and consistency: 111 received a separate model review, while eight were authored and inspected directly against the retrieved sources in the release preparation session. This is model-assisted validation, not a human annotation study. Source ownership, dependency graphs, paired annotations, counts and archive integrity are checked programmatically. Modified tasks require new method executions and evaluations.
-
-Evidence identifiers are release-specific opaque strings. Source post identifiers, URLs and attribution remain available in the corpus and source manifest. Treat evidence identifiers as opaque when integrating a method.
-
-## Reference schema
-
-An evaluator record contains:
-
-```text
-task_id                 Public task identifier
-family_id               Family grouping for partitions and resampling
-instance_id             Base instance shared by two formulations
-formulation             1 or 2
-cell                    C1S1 through C3S3
-required_experts        Required member identifiers
-requirements[]
-  id                    Information-unit identifier
-  claim                 Required, verifiable content
-  satisfying_agents     Specialists that can supply the unit
-  depends_on            Predecessor unit identifiers
-  acceptable_evidence   Accepted source identifiers
-  sources               Reference excerpts and source URLs
-dependency              Legacy selected edge; ignored by the whole-graph scorers
-```
-
-References are evaluator inputs and must not be fed into method planning or member retrieval. Dataset manifests record the release version, counts and file checksums; run records include the version used for execution.
-
-## Evaluation inputs
-
-The v1.1.0 bundle contains 4,290 annotated edges in `requirements[].depends_on` across 1,630 dependent queries. The whole-graph evaluator checks all of these edges using `--scorer semantic --judge-model MODEL`. Solve-based dependency-certification records are not included in this release.
-
-Deterministic scoring accepts separately supplied schema 2.0 references containing frozen source identifiers, acceptance terms, surface variants, objective terms and constraint terms. These annotations are not part of the v1.1.0 download. See [Reference format](reference-format.md) for the schema and [Evaluation](evaluation.md) for commands and scoring definitions.
+Task formulations and annotations are CC BY-SA 4.0. Each archive includes `DATA_LICENSE.txt`. The software's MIT license does not relicense third-party source content.

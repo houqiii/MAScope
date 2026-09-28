@@ -24,10 +24,12 @@ The environment leaves recruitment, delegation, communication and synthesis to t
 
 - **A specialist environment:** 51 Stack Exchange communities, organized into six resource groups. Public profiles support expert selection; each member retrieves from its own corpus.
 - **Collaboration tasks:** 2,766 queries across 499 families, with 11,018 required expertise assignments. Tasks vary in both collaboration structure and expertise scale.
-- **Contribution-level evaluation:** task success and evidence coverage, four collaboration capabilities, and the survival of required work across the complete dependency graph.
+- **Deterministic evaluation:** exact source identifiers and frozen term variants determine acceptance. Every dependency is scored individually; expert recall and precision are averaged over queries.
 - **Protocol-independent execution:** connect an agent system through one Python entrypoint. The environment records recruitment, member work, delivered inputs, contributions, final answers and model usage.
 
-This repository contains the benchmark runtime, evaluator, download tools and documentation. Agent methods are supplied by the user. Data archives are distributed separately.
+The installed benchmark provides the 51 site-agent wrappers, task loading and evaluation. Twelve optional log adapters are listed separately under [`adapters/`](adapters/README.md); they are not imported, registered or executed by the environment. Method implementations are supplied by the user. Data archives are distributed separately.
+
+The v2.0.0 data release is a reconstructed candidate with per-edge retrieval audits and explicit pending validation records. See [release status](docs/data.md#release-status) before interpreting its task or dependency scores.
 
 ## What the measurements distinguish
 
@@ -35,7 +37,7 @@ Recruiting a relevant expert does not establish that its finding was used. MASco
 
 ## Benchmark at a glance
 
-| Task structure | S1: 2–3 experts | S2: 4–5 experts | S3: 6+ experts | Total |
+| Task structure | S1: 2–3 experts | S2: 4–5 experts | S3: 6–8 experts | Total |
 | --- | ---: | ---: | ---: | ---: |
 | C1 · Parallel composition | 454 | 390 | 292 | 1,136 |
 | C2 · Sequential dependence | 394 | 314 | 236 | 944 |
@@ -64,7 +66,7 @@ The runtime uses the Python standard library and an OpenAI-compatible chat-compl
 
 ### 2. Download the data
 
-Download the fixed v1.1.0 data bundles and verify them:
+Download and verify the versioned archives:
 
 ```bash
 mascope download --dest data
@@ -113,18 +115,22 @@ The default decoding is temperature 0.3, top-p 0.95 and up to 4,096 output token
   <img src="assets/figures/workflow.png" width="100%" alt="A service-diagnosis task from initialization through specialist collaboration to evaluation">
 </p>
 
+The environment does not choose a collaboration protocol or load framework-specific adapters. Optional method-to-event mappings are documented separately in [Adapters](adapters/README.md).
+
 ### 4. Evaluate
 
+Use a frozen schema 2.0 reference directory paired with the runtime data. Validate it before scoring:
+
 ```bash
+mascope verify-references --annotations data/evaluator
 mascope evaluate \
   --runtime data/runtime \
   --annotations data/evaluator \
   --runs results/run-1 \
-  --scorer semantic --judge-model "$JUDGE_MODEL" \
   --out results/eval-1
 ```
 
-The downloaded v1.1.0 bundle uses `--scorer semantic` with a configured judge model. The evaluator records every dependency edge and aggregates a stage only when all edges pass. Deterministic source-and-term matching is also available for separately supplied schema 2.0 references; those annotations are not included in the v1.1.0 download. See [Evaluation](docs/evaluation.md) and [Reference format](docs/reference-format.md).
+Evaluation runs offline: no model reads an answer to decide whether it succeeded. Success and evidence coverage share the same source-and-term predicate. Conditional collaboration rates count individual edges over the annotated dependency graph; an unready successor is excluded from the conditional denominator. See [Evaluation](docs/evaluation.md) for formulas and [Data](docs/data.md#evaluation-inputs) for the available annotation formats.
 
 | Evaluation view | Reported measurements |
 | --- | --- |
@@ -150,7 +156,7 @@ mascope summarize \
   --out results/summary.json
 ```
 
-The report contains each repetition's value, the mean and the sample standard deviation. Runs must use the same dataset version, scorer, references and task set. Use family-aware splits for development and family-aware resampling for task-level uncertainty; the two formulations of a base instance are related observations.
+The report contains each repetition's value, the mean and the sample standard deviation. Runs must use the same dataset version, scorer, references and task set. Use family-aware splits for development and family-aware resampling for task-level uncertainty; each family contains 3–7 queries sharing units, required experts and the dependency graph. Hold out entire families.
 
 ## Repository layout
 
@@ -160,15 +166,20 @@ src/mascope/
   dataset.py             Task loading and member-local retrieval
   environment.py         Member operations, traces and budgets
   runner.py              Agent entrypoint and resumable task execution
+  site_agent.py          Frozen specialist prompt and private retrieval loop
+  events.py              Canonical event export and aliases
+  prompts/               Frozen expert and answer-format prompts
+  verification.py        Release inventory and certification checks
   deterministic.py       Source-and-term matching across the full graph
   reference.py           Annotation validation and expert-role matching
-  construction.py        Source identifiers and certification-record checks
-  evaluation.py          Semantic scoring and capability metrics
+  construction.py        Source identifiers and binding/retrieval certification
+  evaluation.py          Edge aggregation and query-macro capability metrics
   report.py              Repeated-run summaries
   download.py            Verified archives and public source retrieval
   model.py               OpenAI-compatible model interface
   cli.py                 Command-line entrypoints
   release.json           Data version and archive checksums
+adapters/                Separate method-to-event mappings and configurations
 docs/                    Benchmark, data, integration and evaluation guides
 tests/                   Runtime, evaluation and release-interface checks
 ```

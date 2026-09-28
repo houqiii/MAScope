@@ -1,0 +1,18 @@
+{
+  "order": "1",
+  "method": "AutoGen-GC",
+  "display": "AutoGen",
+  "class": "central",
+  "team_rule": "the pool is the group; the manager selects speakers",
+  "structure": "coordinator picks the next speaker each turn; every message is visible to all",
+  "stop_rule": "the coordinator emits its termination message",
+  "mapping": {
+    "method": "AutoGen-GC",
+    "recruit": "the manager's first selection of an agent as speaker",
+    "assign": "the manager's speaker selection and the message that prompts it; the transcript is visible to every participant",
+    "aggregate": "the manager's closing summary",
+    "submit": "the termination message"
+  },
+  "native_revision": null,
+  "fixture_verified": true
+}

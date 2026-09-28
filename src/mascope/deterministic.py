@@ -2,9 +2,10 @@ import re
 from pathlib import Path
 
 from .dataset import read_json, read_jsonl, sha256
-from .reference import expert_hits, fingerprint, query_stages, validate_reference
+from .events import normalize_events
+from .reference import expert_hits, fingerprint, validate_families, validate_reference
 
-SCORER_VERSION = "string-full-graph-1"
+SCORER_VERSION = "string-edge-2"
 
 
 def match_terms(text, groups):
@@ -26,13 +27,40 @@ def match_unit(text, unit, citations=(), allow_uncited=False):
     return None
 
 
+def _recipients(event):
+    return event.get("agent_ids", [event.get("agent_id")])
+
+
+def _retrieved(event):
+    return event.get("evidence_ids", [event.get("evidence_id")])
+
+
+def _content(event):
+    pieces = [event.get("instruction", ""), event.get("text", "")]
+    pieces.extend(event.get("evidence_ids", event.get("cited_identifiers", [])))
+    for item in (
+        event.get("inputs", [])
+        + event.get("records", [])
+        + event.get("carried_units", [])
+    ):
+        if isinstance(item, str):
+            pieces.append(item)
+            continue
+        pieces.extend(
+            [item.get("title", ""), item.get("text", ""), item.get("evidence_id", "")]
+        )
+        pieces.extend(item.get("evidence_ids", []))
+    return "\n".join(pieces)
+
+
 class DeterministicEvaluator:
-    def __init__(self, annotations):
+    def __init__(self, annotations, identifier_free=False):
+        self.identifier_free = identifier_free
         self.root = Path(annotations).resolve()
         self.manifest = read_json(self.root / "manifest.json")
         if self.manifest.get("schema_version") != "2.0":
             raise ValueError(
-                "Deterministic evaluation requires schema 2.0 references with frozen acceptance, objective and constraint terms. The v1.1.0 bundle supports only --scorer semantic."
+                "Deterministic evaluation requires schema 2.0 frozen source identifiers and term rules"
             )
         files = self.manifest.get("files", {})
         if "references.jsonl" not in files:
@@ -49,6 +77,13 @@ class DeterministicEvaluator:
             self.references[row["task_id"]] = row
         if len(self.references) != self.manifest["query_count"]:
             raise ValueError("Reference count disagrees with manifest")
+        self.inventory = validate_families(
+            list(self.references.values()),
+            complete=self.manifest.get("scope") != "subset",
+        )
+        for name in ("family_count", "dependency_edge_count"):
+            if name in self.manifest and self.manifest[name] != self.inventory[name]:
+                raise ValueError(f"Reference {name} disagrees with manifest")
 
     def evaluate(self, task, record):
         reference = self.references[task.task_id]
@@ -56,7 +91,9 @@ class DeterministicEvaluator:
             "dataset_version"
         ) != self.manifest.get("runtime_version", self.manifest["version"]):
             raise ValueError("Run and annotation versions or task IDs disagree")
-        events = record["events"]
+        if task.family_id is not None and task.family_id != reference["family_id"]:
+            raise ValueError("Public and reference family IDs disagree")
+        events = normalize_events(record["events"])
         if [e["event_id"] for e in events] != [
             f"e{i + 1:06d}" for i in range(len(events))
         ]:
@@ -64,160 +101,120 @@ class DeterministicEvaluator:
         answer = (record.get("answer") or {}).get("text", "")
         finals = [e for e in events if e["kind"] == "final"]
         if (answer and (len(finals) != 1 or finals[0]["text"] != answer)) or (
-            not answer and finals
+            record.get("answer") is None and finals
         ):
             raise ValueError("Submitted answer disagrees with trace")
-        final_index = events.index(finals[0]) if finals else len(events)
-        if finals and final_index != len(events) - 1:
+        if finals and events[-1] != finals[0]:
             raise ValueError("Trace contains events after submission")
+        for event in events:
+            if event["kind"] == "work_start":
+                if (
+                    not isinstance(event.get("instruction"), str)
+                    or not isinstance(event.get("inputs"), list)
+                    or not _recipients(event)
+                    or any(not isinstance(a, str) or not a for a in _recipients(event))
+                ):
+                    raise ValueError("Incomplete assignment record")
+            if event["kind"] == "contribution":
+                if (
+                    not isinstance(event.get("text"), str)
+                    or not isinstance(event.get("evidence_ids"), list)
+                    or not event.get("artifact_id")
+                    or not event.get("agent_id")
+                ):
+                    raise ValueError("Incomplete local output record")
         units = {u["id"]: u for u in reference["requirements"]}
-        judgments = {key: match_unit(answer, unit) for key, unit in units.items()}
-        recruited = {e["agent_id"] for e in events if e["kind"] == "recruit"}
-        contributions = [
-            (i, e) for i, e in enumerate(events) if e["kind"] == "contribution"
-        ]
-        known_ids = {x for u in units.values() for x in u["acceptable_evidence"]}
+        judgments = {
+            key: match_unit(answer, unit, allow_uncited=self.identifier_free)
+            for key, unit in units.items()
+        }
+        recruits = {}
+        artifacts = {}
+        for i, event in enumerate(events):
+            if event["kind"] == "recruit":
+                recruits.setdefault(event["agent_id"], i)
+            if event["kind"] == "contribution":
+                if event["artifact_id"] in artifacts:
+                    raise ValueError("Duplicate contribution identifier")
+                artifacts[event["artifact_id"]] = event
+            if event["kind"] == "work_start":
+                for carried in event.get("inputs", []):
+                    original = artifacts.get(carried.get("artifact_id"))
+                    if original is None or any(
+                        carried.get(k) != original.get(k)
+                        for k in ("text", "agent_id", "evidence_ids")
+                    ):
+                        raise ValueError(
+                            "Carried contribution disagrees with its original output"
+                        )
 
         def local_match(event, unit):
             citations = event.get("evidence_ids", [])
-            uncited = (
-                not citations
-                and not any(x in event["text"] for x in known_ids)
-                and not re.search(r"MS-[0-9A-Z]{12}|ev_[a-f0-9]+", event["text"])
+            uncited = not citations and not re.search(
+                r"MS-[0-9A-Z]{12}|ev_[a-f0-9]+", event["text"]
             )
-            return match_unit(event["text"], unit, citations, uncited)
+            match = match_unit(event["text"], unit, citations, uncited)
+            candidates = [
+                u
+                for u in units.values()
+                if event["agent_id"] in u["satisfying_agents"]
+                and match_unit(event["text"], u, citations, uncited) is not None
+            ]
+            return match, uncited and len(candidates) > 1
 
+        ready = {}
+        undecided_units = set()
         edges = []
-        for edge in validate_reference(reference):
-            predecessor, successor = units[edge["from"]], units[edge["to"]]
-            best = {
-                "from": edge["from"],
-                "to": edge["to"],
-                "stages": [False] * 5,
-                "event_ids": [[] for _ in range(5)],
-                "matches": {},
-            }
-            for i, finding in contributions:
-                cited_predecessor = [
-                    x
-                    for x in predecessor["acceptable_evidence"]
-                    if x in finding["text"] or x in finding.get("evidence_ids", [])
-                ]
-                finding_match = (
-                    {"evidence_ids": cited_predecessor}
-                    if cited_predecessor
-                    else local_match(finding, predecessor)
-                )
-                if (
-                    finding_match is None
-                    or finding["agent_id"] not in predecessor["satisfying_agents"]
-                ):
+        pending = set(units)
+        while pending:
+            for key in sorted(pending):
+                unit = units[key]
+                if any(p in pending for p in unit.get("depends_on", [])):
                     continue
-                for expert in successor["satisfying_agents"]:
-                    recruitment = [
-                        (j, e)
-                        for j, e in enumerate(events)
-                        if e["kind"] == "recruit" and e["agent_id"] == expert
-                    ]
-                    if not recruitment:
-                        continue
-                    candidate = {
-                        "from": edge["from"],
-                        "to": edge["to"],
-                        "stages": [True, False, False, False, False],
-                        "event_ids": [
-                            [finding["event_id"], recruitment[0][1]["event_id"]],
-                            [],
-                            [],
-                            [],
-                            [],
-                        ],
-                        "matches": {"finding": finding_match},
-                    }
-                    if sum(candidate["stages"]) > sum(best["stages"]):
-                        best = candidate
-                    for j, assignment in enumerate(events):
-                        if (
-                            j <= max(i, recruitment[0][0])
-                            or assignment["kind"] != "work_start"
-                            or assignment["agent_id"] != expert
-                        ):
-                            continue
-                        objective = match_terms(
-                            assignment["instruction"], successor["objective_terms"]
+                if not unit.get("depends_on"):
+                    ready[key] = next(
+                        (
+                            i
+                            for i, e in enumerate(events)
+                            if e["kind"] in {"search", "fetch"}
+                            and e.get("agent_id") in unit["satisfying_agents"]
+                            and set(_retrieved(e)) & set(unit["acceptable_evidence"])
+                        ),
+                        None,
+                    )
+                else:
+                    incoming = []
+                    for parent in unit["depends_on"]:
+                        edge = self._edge(
+                            parent,
+                            key,
+                            ready[parent],
+                            units,
+                            events,
+                            recruits,
+                            judgments,
+                            local_match,
                         )
-                        if objective is None:
-                            continue
-                        stages = [True, True, False, False, False]
-                        locators = [
-                            candidate["event_ids"][0],
-                            [assignment["event_id"]],
-                            [],
-                            [],
-                            [],
-                        ]
-                        matches = {"finding": finding_match, "objective": objective}
-                        for carried in assignment.get("inputs", []):
-                            if carried.get("artifact_id") != finding.get("artifact_id"):
-                                continue
-                            if any(
-                                carried.get(k) != finding.get(k)
-                                for k in ("text", "agent_id", "evidence_ids")
-                            ):
-                                raise ValueError(
-                                    "Carried contribution disagrees with its original output"
-                                )
-                            constraints = match_terms(
-                                carried["text"], predecessor["constraint_terms"]
+                        if parent in undecided_units:
+                            edge.update(
+                                status="undecided",
+                                reason="Predecessor readiness depends on an undecided local output",
                             )
-                            cited = [
-                                x
-                                for x in predecessor["acceptable_evidence"]
-                                if x in carried["text"]
-                                or x in carried.get("evidence_ids", [])
-                            ]
-                            if constraints is not None and cited:
-                                stages[2] = True
-                                locators[2] = [
-                                    assignment["event_id"],
-                                    finding["event_id"],
-                                ]
-                                matches["constraints"] = constraints
-                                matches["carried_evidence"] = cited
-                                break
-                        if stages[2]:
-                            next_assignment = next(
-                                (
-                                    k
-                                    for k in range(j + 1, len(events))
-                                    if events[k]["kind"] == "work_start"
-                                    and events[k]["agent_id"] == expert
-                                ),
-                                final_index,
-                            )
-                            for k, output in contributions:
-                                if (
-                                    not j < k < next_assignment
-                                    or output["agent_id"] != expert
-                                ):
-                                    continue
-                                local = local_match(output, successor)
-                                if local is not None:
-                                    stages[3] = True
-                                    locators[3] = [output["event_id"]]
-                                    matches["local_result"] = local
-                                    if judgments[edge["to"]] is not None and finals:
-                                        stages[4] = True
-                                        locators[4] = [finals[0]["event_id"]]
-                                    break
-                        if sum(stages) > sum(best["stages"]):
-                            best = {
-                                **edge,
-                                "stages": stages,
-                                "event_ids": locators,
-                                "matches": matches,
-                            }
-            edges.append(best)
+                        edges.append(edge)
+                        incoming.append(edge)
+                    if any(e["status"] == "undecided" for e in incoming):
+                        undecided_units.add(key)
+                    solved = [e.get("local_index") for e in incoming]
+                    ready[key] = (
+                        max(solved) if all(x is not None for x in solved) else None
+                    )
+                pending.remove(key)
+                break
+        for edge in edges:
+            edge.pop("local_index", None)
+            edge["bypass"] = self._bypass(
+                edge, units, events, record.get("execution_mode") == "single_agent"
+            )
         completed = record["status"] in {"completed", "budget_exhausted"} and bool(
             answer
         )
@@ -227,19 +224,165 @@ class DeterministicEvaluator:
             "dataset_version": record["dataset_version"],
             "reference_version": self.manifest["version"],
             "reference_sha256": fingerprint(reference),
-            "scorer_version": SCORER_VERSION,
+            "scorer_version": SCORER_VERSION
+            + ("-identifier-free" if self.identifier_free else ""),
+            "answered": int(completed and covered == len(units)),
+            "graph_carried": bool(edges)
+            and all(e["status"] == "decided" and e["stages"][4] for e in edges),
+            "cap_hit": bool(
+                record.get("cap_hit", record["status"] == "budget_exhausted")
+            ),
             "family_id": reference["family_id"],
-            "instance_id": reference["instance_id"],
             "cell": reference["cell"],
             "success": int(completed and covered == len(units)),
             "evidence_coverage": covered / len(units),
-            "expert_hits": expert_hits(reference, recruited),
+            "expert_hits": expert_hits(reference, set(recruits)),
             "required_experts": len(reference["required_experts"]),
-            "recruited_experts": len(recruited),
-            "stages": query_stages(edges),
+            "recruited_experts": len(recruits),
             "edge_judgments": edges,
             "calls": record["usage"]["calls"],
             "tokens": record["usage"]["tokens"],
             "retrieval_calls": sum(e["kind"] in {"search", "fetch"} for e in events),
             "judgment": {"requirements": judgments},
         }
+
+    def _edge(
+        self,
+        parent,
+        child,
+        finding_index,
+        units,
+        events,
+        recruits,
+        judgments,
+        local_match,
+    ):
+        predecessor, successor = units[parent], units[child]
+        best = {
+            "from": parent,
+            "to": child,
+            "stages": [False] * 5,
+            "event_ids": [[] for _ in range(5)],
+            "status": "decided",
+            "matches": {},
+        }
+        if finding_index is None:
+            return best
+        ambiguous = False
+        local_indices = []
+        for expert in successor["satisfying_agents"]:
+            if expert not in recruits:
+                continue
+            first = [
+                events[finding_index]["event_id"],
+                events[recruits[expert]]["event_id"],
+            ]
+            if not best["stages"][0]:
+                best["stages"][0], best["event_ids"][0] = True, first
+            for j, assignment in enumerate(events):
+                if (
+                    j <= max(finding_index, recruits[expert])
+                    or assignment["kind"] != "work_start"
+                    or expert not in _recipients(assignment)
+                ):
+                    continue
+                objective = match_terms(
+                    assignment["instruction"], successor["objective_terms"]
+                )
+                if objective is None:
+                    continue
+                stages, locators = (
+                    [True, True, False, False, False],
+                    [first, [assignment["event_id"]], [], [], []],
+                )
+                content = _content(assignment)
+                constraints = match_terms(content, predecessor["constraint_terms"])
+                cited = [x for x in predecessor["acceptable_evidence"] if x in content]
+                matches = {"objective": objective}
+                if constraints is not None and cited:
+                    stages[2], locators[2] = True, [assignment["event_id"]]
+                    matches.update(constraints=constraints, carried_evidence=cited)
+                    stop = next(
+                        (
+                            k
+                            for k in range(j + 1, len(events))
+                            if events[k]["kind"] == "work_start"
+                            and expert in _recipients(events[k])
+                        ),
+                        len(events),
+                    )
+                    for k in range(j + 1, stop):
+                        output = events[k]
+                        if (
+                            output["kind"] != "contribution"
+                            or output["agent_id"] != expert
+                        ):
+                            continue
+                        local, uncertain = local_match(output, successor)
+                        ambiguous |= local is not None and uncertain
+                        if local is None or uncertain:
+                            continue
+                        stages[3], locators[3] = True, [output["event_id"]]
+                        local_indices.append(k)
+                        matches["local_result"] = local
+                        if judgments[child] is not None:
+                            stages[4], locators[4] = True, [events[-1]["event_id"]]
+                        break
+                if sum(stages) > sum(best["stages"]):
+                    best.update(stages=stages, event_ids=locators, matches=matches)
+        if local_indices:
+            best["local_index"] = min(local_indices)
+        elif ambiguous:
+            best.update(
+                status="undecided",
+                reason="Uncited local output matches multiple eligible units",
+            )
+        return best
+
+    def _bypass(self, edge, units, events, single_agent=False):
+        predecessor, successor = units[edge["from"]], units[edge["to"]]
+        groups = successor.get("dependency_terms", {}).get(edge["from"])
+        for i, event in enumerate(events):
+            if (
+                event["kind"] not in {"search", "fetch"}
+                or (
+                    event.get("agent_id") not in successor["satisfying_agents"]
+                    and not (
+                        single_agent
+                        and event.get("agent_id") == "controller"
+                        and event.get("site") in successor["satisfying_agents"]
+                    )
+                )
+                or not set(_retrieved(event)) & set(successor["acceptable_evidence"])
+            ):
+                continue
+            received, complete = [], True
+            for earlier in events[:i]:
+                if (
+                    earlier["kind"] == "message"
+                    and earlier.get("recipient") == event["agent_id"]
+                ) or (
+                    earlier["kind"] == "work_start"
+                    and event["agent_id"] in _recipients(earlier)
+                ):
+                    received.append(_content(earlier))
+                if (
+                    earlier["kind"] in {"search", "fetch"}
+                    and earlier.get("agent_id") == event["agent_id"]
+                ):
+                    received.extend(x for x in _retrieved(earlier) if x)
+                    received.append(_content(earlier))
+                    complete &= "records" in earlier
+            text = "\n".join(received)
+            present = any(x in text for x in predecessor["acceptable_evidence"]) or any(
+                v in text for group in (groups or []) for v in group
+            )
+            bypassed = (
+                False if present else True if complete and groups is not None else None
+            )
+            return {
+                "retrieved": True,
+                "event_id": event["event_id"],
+                "bypassed": bypassed,
+            }
+        return {"retrieved": False, "bypassed": False}

@@ -1,0 +1,18 @@
+{
+  "order": "5",
+  "method": "LangGraph-Sup",
+  "display": "LangGraph",
+  "class": "central",
+  "team_rule": "the pool is the worker set; the supervisor routes",
+  "structure": "supervisor hands off to one worker at a time, or answers; no task list",
+  "stop_rule": "the supervisor answers the user",
+  "mapping": {
+    "method": "LangGraph-Sup",
+    "recruit": "the supervisor's first handoff to a worker",
+    "assign": "the supervisor's handoff to a worker, with the message history it passes",
+    "aggregate": "the supervisor's turn after a worker returns",
+    "submit": "the supervisor's answer to the user"
+  },
+  "native_revision": null,
+  "fixture_verified": true
+}

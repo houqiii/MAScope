@@ -1,0 +1,18 @@
+{
+  "order": "4",
+  "method": "CrewAI-Hier",
+  "display": "CrewAI",
+  "class": "central",
+  "team_rule": "the pool is the crew; the manager delegates",
+  "structure": "task list fixed at kickoff; the manager delegates each task once",
+  "stop_rule": "the last planned task returns",
+  "mapping": {
+    "method": "CrewAI-Hier",
+    "recruit": "the manager's first delegation to a crew member",
+    "assign": "the manager's delegation of a task from the list fixed at kickoff",
+    "aggregate": "the manager's synthesis of task outputs",
+    "submit": "the kickoff result"
+  },
+  "native_revision": null,
+  "fixture_verified": true
+}

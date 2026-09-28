@@ -2,6 +2,7 @@ import hashlib
 import json
 import math
 import re
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
@@ -30,13 +31,14 @@ def sha256(path):
 
 
 def tokens(text):
-    return set(re.findall(r"[a-z0-9_+#.-]{2,}", text.lower()))
+    return re.findall(r"[a-z0-9_+#.-]{2,}", text.lower())
 
 
 @dataclass(frozen=True)
 class Task:
     task_id: str
     query: str
+    family_id: str | None = None
 
 
 class Corpus:
@@ -45,7 +47,7 @@ class Corpus:
         self.agent_id = agent_id
         self._offsets = {}
         self._postings = {}
-        self._tags = {}
+        self._lengths = {}
         self._lock = RLock()
         self._loaded = False
 
@@ -71,9 +73,14 @@ class Corpus:
                         "Invalid corpus ownership or duplicate evidence ID"
                     )
                 self._offsets[ref] = offset
-                self._tags[ref] = tokens(" ".join(record.get("tags", [])))
-                for term in tokens(record["title"] + " " + record["text"]):
-                    self._postings.setdefault(term, []).append(ref)
+                frequencies = Counter(
+                    tokens(
+                        record.get("question", record["title"]) + " " + record["text"]
+                    )
+                )
+                self._lengths[ref] = sum(frequencies.values())
+                for term, count in frequencies.items():
+                    self._postings.setdefault(term, []).append((ref, count))
 
     def fetch(self, evidence_id):
         self._load()
@@ -83,21 +90,43 @@ class Corpus:
             stream.seek(self._offsets[evidence_id])
             return json.loads(stream.readline())
 
-    def search(self, query, limit=5):
-        if not 1 <= limit <= 8:
-            raise ValueError("Search limit must be between 1 and 8")
+    def _scores(self, query):
         self._load()
-        terms = tokens(query)
+        terms = set(tokens(query))
         scores = {}
         n = len(self._offsets)
+        average = sum(self._lengths.values()) / n if n else 1
         for term in sorted(terms):
-            refs = self._postings.get(term, ())
-            weight = math.log1p(n / len(refs)) if refs else 0
-            for ref in refs:
-                scores[ref] = scores.get(ref, 0) + weight * (
-                    2 if term in self._tags[ref] else 1
+            postings = self._postings.get(term, ())
+            weight = math.log(1 + (n - len(postings) + 0.5) / (len(postings) + 0.5))
+            for ref, frequency in postings:
+                normalizer = 0.9 * (1 - 0.4 + 0.4 * self._lengths[ref] / (average or 1))
+                scores[ref] = scores.get(ref, 0) + weight * frequency * 1.9 / (
+                    frequency + normalizer
                 )
-        ranked = sorted(scores, key=lambda ref: (-round(scores[ref], 10), ref))[:limit]
+        return scores
+
+    def rank(self, query, evidence_ids):
+        scores = self._scores(query)
+        ranks = {}
+        for evidence in evidence_ids:
+            if evidence not in self._offsets:
+                raise KeyError("Evidence is not available to this member")
+            value = scores.get(evidence, 0)
+            ranks[evidence] = 1 + sum(
+                score > value or (score == value and ref < evidence)
+                for ref in self._offsets
+                for score in [scores.get(ref, 0)]
+            )
+        return ranks
+
+    def search(self, query, limit=8):
+        if not 1 <= limit <= 8:
+            raise ValueError("Search limit must be between 1 and 8")
+        scores = self._scores(query)
+        ranked = sorted(self._offsets, key=lambda ref: (-scores.get(ref, 0), ref))[
+            :limit
+        ]
         return [self.fetch(ref) for ref in ranked]
 
 
@@ -110,8 +139,12 @@ class Dataset:
         self._profiles = read_json(self.root / "profiles.json")
         self._tasks = {}
         for row in read_jsonl(self.root / "tasks.jsonl"):
-            if set(row) != {"task_id", "query"}:
-                raise ValueError("Public tasks must contain only task_id and query")
+            if not {"task_id", "query"} <= set(row) or set(row) - {
+                "task_id",
+                "query",
+                "family_id",
+            }:
+                raise ValueError("Public tasks allow task_id, query and family_id only")
             if row["task_id"] in self._tasks:
                 raise ValueError("Duplicate task ID")
             self._tasks[row["task_id"]] = Task(**row)

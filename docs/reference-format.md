@@ -1,33 +1,39 @@
-# Frozen reference format
+# Frozen references
 
-The deterministic evaluator consumes a separate directory containing `manifest.json` and `references.jsonl`. Keep it inaccessible to evaluated methods.
+Evaluation consumes `manifest.json` and `references.jsonl` from a separate directory. Keep the reference directory outside evaluated methods' inputs. Source identifiers and term variants are frozen before execution.
 
 ## Manifest
 
 ```json
 {
   "schema_version": "2.0",
-  "version": "YOUR_FROZEN_REFERENCE_VERSION",
-  "runtime_version": "MATCHING_RUNTIME_DATA_VERSION",
+  "version": "FROZEN_REFERENCE_VERSION",
+  "runtime_version": "MATCHING_RUNTIME_VERSION",
   "query_count": 2766,
+  "family_count": 499,
+  "dependency_edge_count": 3664,
   "files": {"references.jsonl": "SHA256_OF_REFERENCES"}
 }
 ```
 
-The reference version identifies the annotation revision. The runtime version must match run records. Every output includes a hash of the exact reference used for that query.
+Counts are checked against the records. Complete reference sets require 3–7 queries per family. A deliberately exported subset must declare `"scope": "subset"`; it retains all family identifiers and still undergoes within-family consistency checks. A subset cannot pass full-release validation.
 
 ## Per-query fields
 
 | Field | Content |
 | --- | --- |
-| `task_id`, `family_id`, `instance_id`, `formulation`, `cell` | Task identity and partition metadata |
-| `required_experts` | One primary member ID per required expert role |
-| `expert_roles` | Optional list of alternative member IDs per role; defaults to singleton primary IDs |
-| `requirements` | Nonempty list of information units |
+| `task_id`, `family_id`, `cell` | Query identity, family membership and taxonomy cell |
+| `required_experts` | One primary agent ID per required role |
+| `expert_roles` | Optional alternative agent IDs for each role |
+| `requirements` | Information units, their sources, acceptance and dependencies |
 
-Each information unit contains `id`, `claim`, `satisfying_agents`, `depends_on`, `acceptable_evidence`, `sources`, and `acceptance`. The complete graph is derived from `depends_on`; C1 has no edges and C2/C3 have at least one. Unknown predecessors, duplicate edges and cycles are rejected.
+Family members must share the units, required experts, accepted sources, term rules, taxonomy and dependency graph. A query is identified by its own `task_id`. Public `tasks.jsonl` records may carry `family_id` for partitioning; it is checked against reference membership during evaluation.
 
-`acceptance` is a nonempty list of alternatives, each with `evidence_ids` and `terms`. An alternative requires one of its source identifiers and one variant from every term group. This illustrative fragment is a format example, not a benchmark annotation:
+Each unit contains `id`, `claim`, `satisfying_agents`, `depends_on`, `acceptable_evidence`, `sources`, and `acceptance`. Dependencies are the complete set of predecessors, not a selected edge. C1 has an empty graph; C2 and C3 have at least one edge. Unknown units, duplicate edges and cycles are rejected.
+
+## Literal rules
+
+Each acceptance alternative lists source identifiers and AND-connected term groups; variants within a group are OR-connected. For example:
 
 ```json
 {
@@ -36,20 +42,36 @@ Each information unit contains `id`, `claim`, `satisfying_agents`, `depends_on`,
     "terms": [["30 s", "30 seconds"], ["read timeout"]]
   }],
   "objective_terms": [["check timeout", "review timeout"]],
-  "constraint_terms": [["certificate verification", "TLS verification"]]
+  "constraint_terms": [["certificate verification", "TLS verification"]],
+  "dependency_terms": {"r1": [["30 s", "30 seconds"]]}
 }
 ```
 
-A successor needs nonempty `objective_terms`; a predecessor needs explicit `constraint_terms` (which may be an empty list if none are required). Surface variants are authored and frozen before execution. Neither the evaluator nor a model expands them at scoring time. Equivalent source alternatives are listed explicitly; all graph edges remain necessary under those alternatives.
+The fragment illustrates the format, not a released task. A successor requires nonempty objective terms. A predecessor requires explicit constraint groups, which may be empty when no constraint is required. `dependency_terms` maps each incoming predecessor to the certified bound terms used in bypass diagnosis.
 
-## Construction utilities
+An accepted source identifier has prefix `MS-` and twelve Crockford base-32 characters. Identifiers and literal variants are checked exactly; the evaluator never generates or extends acceptance rules. Equivalent source routes must be recorded explicitly and preserve the certified dependency graph.
 
-`mascope.construction.source_identifier(key, community, post, unit_index)` produces `MS-` plus twelve Crockford base-32 characters using HMAC-SHA256. Generate the private key once, store it outside the release, check the resulting identifier map for collisions, and apply the same map to corpora and references. Do not mix identifiers from different releases.
+## Construction
 
-`mascope.construction.certify_dependencies(unit_ids, full_results, withheld_results)` consumes ten boolean solve outcomes for each unit with all candidate findings supplied and ten for every ordered candidate-pair withholding condition. It retains a candidate edge when full-context success is at least 8/10 and withheld success is at most 1/10, then validates acyclicity. Preserve the underlying prompts, outputs, scorer decisions and execution metadata outside the runtime bundle; the boolean counts alone are not a substitute for that provenance.
+`source_identifier(key, community, post, unit_index)` derives a stable keyed identifier. Generate and retain the private construction key outside the release, check collisions, and apply the resulting identifier map consistently to corpus records and references.
+
+`certify_group(queries, units, corpora)` certifies a candidate family using frozen acceptance and the runtime retriever. Units supply their frozen `objective` and `finding`, accepted sources, and `term_kinds` identifying specific quantities, configuration keys, versions or components. A general concept cannot supply a bound term.
+
+Certification checks:
+
+1. Each acceptance term absent from the questions and downstream sources has exactly one supplying unit.
+2. Every downstream source and equivalent is outside the top eight for the query battery without that supplier, and reachable with its finding.
+3. All family queries pass and the resulting graph is acyclic.
+
+The battery contains the whole question, its sentences and the objective stripped of bound terms, plus combinations with other candidates' findings. The saved certificate contains the battery, top-eight positions, input hashes and corpus checksums. A missing source, ambiguous binding, failed reach check or cycle rejects the candidate. Local-solvability runs are separate from certification.
 
 ```bash
-mascope verify-references --annotations /path/to/frozen-references
+mascope verify-references --annotations "$MASCOPE_REFERENCES"
+mascope verify-references --annotations "$MASCOPE_REFERENCES" --runtime data/runtime --release
 ```
 
-This command validates annotation structure and checksums. It does not establish local solvability or causal necessity without the corresponding experiments.
+The first command validates rules, checksums and families. The second additionally checks the complete release inventory, public family labels, expert ownership, and source IDs against the runtime. It does not replace the recorded certification and solvability checks.
+
+`bind_terms(source_id, target_id, groups, units, queries)` checks literal supplier uniqueness and absence from queries. `reach(corpus, evidence_ids, query_group, predecessor_finding)` returns real ranks both with and without the predecessor and records a failed check without replacing ranks with target values. `certify_group` is the strict family gate and rejects a group if any check fails.
+
+The v2 candidate also includes `certification/edges.jsonl` with measured ranks and a status for every declared edge. A graph entry is not by itself proof of certification. `certification/returns.jsonl` identifies the provenance of construction summaries; summaries imported from a construction record are distinguished from observed run logs.

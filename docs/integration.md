@@ -4,16 +4,16 @@
 
 An agent is a Python callable `solve(environment)` that returns a final-answer string or calls `environment.submit(text, artifact_ids)`. Its planning, routing, communication and stopping rules belong to the caller.
 
-`Environment.task` contains only `task_id` and `query`. The same answer-format sentence is appended to every query, asking for the identifiers of supporting passages. `Environment.profiles()` returns member identifiers, names, expertise descriptions and tags.
+`Environment.task` contains `task_id`, `query` and optional `family_id` metadata. The same answer-format sentence is appended to every query, asking for the identifiers of supporting passages. `Environment.profiles()` returns member identifiers, names, expertise descriptions and tags.
 
 ## Member operations
 
 | Operation | Result |
 | --- | --- |
 | `recruit(agent_id)` | Registers a participating specialist |
-| `ask(agent_id, instruction, inputs=(), top_k=5)` | Retrieves local evidence, executes one specialist turn and returns a contribution |
-| `start_work(agent_id, instruction, inputs=())` | Records an assignment and returns the supplied colleague contributions for custom execution |
-| `search(agent_id, query, limit=5)` | Retrieves at most 8 records from that member's corpus |
+| `ask(agent_id, instruction, inputs=(), top_k=8)` | Runs the frozen expert prompt with a retrieval tool loop and returns a contribution |
+| `start_work(agent_id, instruction, inputs=(), carried_units=())` | Records an assignment and returns the supplied colleague contributions for custom execution |
+| `search(agent_id, query, limit=8)` | Retrieves at most 8 records from that member's corpus |
 | `fetch(agent_id, evidence_id)` | Reads one record owned by that member |
 | `contribute(agent_id, text, evidence_ids=())` | Records a local contribution and validates its evidence ownership |
 | `send(sender, recipient, text, artifact_ids=())` | Records a message between recruited members or the controller |
@@ -22,7 +22,7 @@ An agent is a Python callable `solve(environment)` that returns a final-answer s
 
 `ask` accepts contribution IDs or previously returned contribution objects in `inputs`. These inputs are delivered to the receiving member and recorded verbatim. `send` records a communication event; the caller controls when the recipient acts and which messages it receives. Pass the required contributions through `ask(inputs=...)` or include the message contents in the next `complete` call.
 
-`search` uses deterministic inverse-document-frequency term matching with extra weight for tags. It returns no records for a query with no lexical matches. Each record contains an evidence identifier, title, tags, text and source URL. Search never exposes another member's corpus.
+`search` ranks question and accepted-answer text using BM25 (k1 = 0.9, b = 0.4), returning the top eight by default. Text is lowercased and tokenized with `[a-z0-9_+#.-]{2,}`; each distinct query term contributes once. Ties, including zero-score ties, are ordered by evidence identifier. Tags do not receive extra weight. Each record contains an evidence identifier, title, tags, text and source URL. Search never exposes another member's corpus.
 
 ## Custom specialist execution
 
@@ -50,8 +50,18 @@ Each run is written atomically as one JSON file. The record contains the dataset
 
 ## Reference separation
 
-The runtime archive contains the public task envelope and member resources. The evaluator archive contains requirements, source alternatives, task-family metadata and dependency annotations. Agent code should use only the runtime API. The local Python interface defines an information-access contract; process or container isolation must be supplied by deployments running untrusted agent implementations.
+The runtime archive contains the public task envelope and member resources. The evaluator archive contains requirements, source alternatives, dependency annotations and frozen acceptance terms. Family membership may also be exposed as public partition metadata. Agent code should use only the runtime API. The local Python interface defines an information-access contract; process or container isolation must be supplied by deployments running untrusted agent implementations.
 
 ## Reproducible execution
 
 The default transport requests temperature 0.3 and top-p 0.95. `--seed` is forwarded when supplied; provider support and reproducibility remain provider-dependent. Run records retain decoding settings and runtime version, and resume rejects changed settings. Retrieval calls are counted separately; their text enters token accounting when supplied to a model. The local runtime does not enforce a process security boundary.
+
+## Canonical events and visible inputs
+
+Exported traces use `recruit`, `assign`, `message`, `retrieve`, `local_output`, `aggregate`, `memory`, `submit`, and `usage`. An assignment's `carried_units` contains all content actually readable when work begins: delivered messages, supplied peer outputs, and the shared thread or board included in that prompt. A message existing elsewhere in a log does not establish delivery. Use `record_aggregate(text, artifact_ids, actor)` and `record_memory(module, operation, items)` for those events and `complete` for their model costs.
+
+`ask` uses the frozen `prompts/expert.txt` and the `retrieve(query)` tool scoped to the selected site. Tool calls, outputs and provider usage are retained. The benchmark supplies no single-agent or multi-agent method implementation.
+
+Retrieval returns only the identifier, question and accepted-answer text to the caller. Attribution and licensing records remain in the data archives. Twelve optional [log adapters](../adapters/README.md) are provided outside the installed package. They convert caller-supplied logs after execution; the environment never imports them.
+
+At a budget cap the runner submits the latest answer explicitly retained by `hold_answer(text)`, or an empty answer when none exists. It does not call a synthesis model after the cap. Retrieval operations have their own usage events; their text contributes tokens when it is sent to a model.

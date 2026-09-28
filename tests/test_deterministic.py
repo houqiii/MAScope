@@ -47,6 +47,7 @@ def evaluator(tmp_path, ref=None):
         json.dumps(
             {
                 "schema_version": "2.0",
+                "scope": "subset",
                 "version": "test",
                 "query_count": 1,
                 "files": {"references.jsonl": sha256(tmp_path / "references.jsonl")},
@@ -65,6 +66,14 @@ def record():
         "text": "blue route",
         "evidence_ids": ["MS-000000000001"],
     }
+    events.append(
+        {
+            "kind": "search",
+            "agent_id": "alpha",
+            "evidence_ids": ["MS-000000000001"],
+            "records": [{"evidence_id": "MS-000000000001", "text": "blue route"}],
+        }
+    )
     events.append(finding)
     for i, agent, term in [(2, "beta", "five units"), (3, "gamma", "TLS kept")]:
         events.append(
@@ -114,7 +123,7 @@ def test_deterministic_replay_and_exact_matches(tmp_path):
     first = score(ev)
     assert first == score(ev)
     assert first["success"] == first["evidence_coverage"] == 1
-    assert first["stages"] == [True] * 5
+    assert all(e["stages"] == [True] * 5 for e in first["edge_judgments"])
     assert len(first["edge_judgments"]) == 2
     assert first["judgment"]["requirements"]["r2"]["terms"] == [
         {"variant": "five units", "offset": 28}
@@ -143,24 +152,29 @@ def test_registered_variants_only(tmp_path):
     assert score(ev, run)["success"] == 0
 
 
-def test_query_stage_requires_every_edge_not_edge_average(tmp_path):
+def test_aggregation_counts_edges_independently(tmp_path):
     ev = evaluator(tmp_path)
     run = record()
-    run["events"][6]["instruction"] = "unrelated work"
+    run["events"][7]["instruction"] = "unrelated work"
     row = score(ev, run)
     assert row["edge_judgments"][0]["stages"] == [True] * 5
     assert row["edge_judgments"][1]["stages"] == [True, False, False, False, False]
-    assert row["stages"] == [True, False, False, False, False]
-    assert aggregate([row])["task_orchestration"] == 0
+    assert aggregate([row])["task_orchestration"] == 50
 
 
 def test_delivery_requires_real_carried_inputs(tmp_path):
     ev = evaluator(tmp_path)
     run = record()
-    run["events"][4]["inputs"] = []
-    assert score(ev, run)["stages"] == [True, True, False, False, False]
+    run["events"][5]["inputs"] = []
+    assert score(ev, run)["edge_judgments"][0]["stages"] == [
+        True,
+        True,
+        False,
+        False,
+        False,
+    ]
     run = record()
-    run["events"][4]["inputs"][0]["text"] = "invented"
+    run["events"][5]["inputs"][0]["text"] = "invented"
     with pytest.raises(ValueError, match="Carried"):
         score(ev, run)
 
@@ -168,8 +182,14 @@ def test_delivery_requires_real_carried_inputs(tmp_path):
 def test_local_result_must_follow_assignment_and_precede_next(tmp_path):
     ev = evaluator(tmp_path)
     run = record()
-    run["events"][5]["agent_id"] = "gamma"
-    assert score(ev, run)["stages"] == [True, True, True, False, False]
+    run["events"][6]["agent_id"] = "gamma"
+    assert score(ev, run)["edge_judgments"][0]["stages"] == [
+        True,
+        True,
+        True,
+        False,
+        False,
+    ]
 
 
 def test_final_integration_loss_is_distinct_from_local_solve(tmp_path):
@@ -177,7 +197,7 @@ def test_final_integration_loss_is_distinct_from_local_solve(tmp_path):
     run = record()
     set_answer(run, "blue route MS-000000000001; TLS kept MS-000000000003")
     row = score(ev, run)
-    assert row["stages"] == [True, True, True, True, False]
+    assert row["edge_judgments"][0]["stages"] == [True, True, True, True, False]
     assert row["success"] == 0
     assert row["evidence_coverage"] == pytest.approx(2 / 3)
 
@@ -185,10 +205,10 @@ def test_final_integration_loss_is_distinct_from_local_solve(tmp_path):
 def test_term_only_local_output_and_wrong_identifier(tmp_path):
     ev = evaluator(tmp_path)
     run = record()
-    run["events"][5]["evidence_ids"] = []
-    assert score(ev, run)["stages"] == [True] * 5
-    run["events"][5]["evidence_ids"] = ["wrong"]
-    assert score(ev, run)["stages"][3] is False
+    run["events"][6]["evidence_ids"] = []
+    assert score(ev, run)["edge_judgments"][0]["stages"] == [True] * 5
+    run["events"][6]["evidence_ids"] = ["wrong"]
+    assert score(ev, run)["edge_judgments"][0]["stages"][3] is False
 
 
 def test_schema_fails_closed_without_annotations(tmp_path):
@@ -238,3 +258,152 @@ def test_different_scorers_and_references_cannot_be_pooled(tmp_path):
     other = {**row, "reference_sha256": "changed"}
     with pytest.raises(ValueError):
         summarize_runs([[row], [other]])
+
+
+def reorder(run):
+    for i, event in enumerate(run["events"], 1):
+        event["event_id"] = f"e{i:06d}"
+
+
+def test_root_is_ready_on_retrieval_without_local_output(tmp_path):
+    run = record()
+    del run["events"][4]
+    for event in run["events"]:
+        if event["kind"] == "work_start":
+            event["inputs"] = []
+            event["instruction"] += "; blue route MS-000000000001"
+    reorder(run)
+    assert all(
+        e["stages"] == [True] * 5
+        for e in score(evaluator(tmp_path), run)["edge_judgments"]
+    )
+
+
+def test_unretrieved_root_cannot_be_ready(tmp_path):
+    run = record()
+    del run["events"][3]
+    reorder(run)
+    assert all(
+        e["stages"] == [False] * 5
+        for e in score(evaluator(tmp_path), run)["edge_judgments"]
+    )
+
+
+def test_upstream_failure_does_not_penalize_unready_successor(tmp_path):
+    ref = reference()
+    ref["requirements"][2]["depends_on"] = ["r2"]
+    run = record()
+    run["events"][5]["instruction"] = "unrelated work"
+    row = score(evaluator(tmp_path, ref), run)
+    edges = row["edge_judgments"]
+    assert edges[0]["stages"] == [True, False, False, False, False]
+    assert edges[1]["stages"] == [False] * 5
+    result = aggregate([row])
+    assert result["dependency_counts"] == [1, 0, 0, 0, 0]
+    assert result["not_ready_edges"] == 1
+
+
+def test_readiness_propagates_after_upstream_local_solve(tmp_path):
+    ref = reference()
+    ref["requirements"][2]["depends_on"] = ["r2"]
+    run = record()
+    run["events"][7]["inputs"] = [copy.deepcopy(run["events"][6])]
+    row = score(evaluator(tmp_path, ref), run)
+    assert all(e["stages"] == [True] * 5 for e in row["edge_judgments"])
+
+
+def test_group_assignment_is_resolved_for_each_expert(tmp_path):
+    run = record()
+    run["events"][5]["agent_ids"] = ["beta", "gamma"]
+    del run["events"][5]["agent_id"]
+    run["events"][5]["instruction"] = "check five units and check TLS kept"
+    del run["events"][7]
+    reorder(run)
+    assert all(
+        e["stages"] == [True] * 5
+        for e in score(evaluator(tmp_path), run)["edge_judgments"]
+    )
+
+
+def test_undecided_edges_leave_both_sides_of_all_ratios(tmp_path):
+    row = score(evaluator(tmp_path))
+    row["edge_judgments"][1].update(
+        status="undecided",
+        reason="ambiguous local output",
+        stages=[True, True, True, False, False],
+    )
+    result = aggregate([row])
+    assert result["dependency_counts"] == [1] * 5
+    assert result["undecided_edges"] == 1
+    assert result["dependency_survival"] == 100
+
+
+def test_uncited_ambiguous_output_is_not_a_failure(tmp_path):
+    ref = reference()
+    ref["requirements"][2]["satisfying_agents"] = ["beta"]
+    ref["requirements"][2]["acceptance"][0]["terms"] = [["five units"]]
+    run = record()
+    run["events"][6]["evidence_ids"] = []
+    row = score(evaluator(tmp_path, ref), run)
+    assert row["edge_judgments"][0]["status"] == "undecided"
+
+
+def test_bypass_only_considers_received_content(tmp_path):
+    ref = reference()
+    ref["requirements"][1]["dependency_terms"] = {"r1": [["blue route"]]}
+    run = record()
+    run["events"].insert(
+        3,
+        {
+            "kind": "contribution",
+            "agent_id": "beta",
+            "artifact_id": "b0",
+            "text": "blue route",
+            "evidence_ids": [],
+        },
+    )
+    run["events"].insert(
+        4,
+        {
+            "kind": "search",
+            "agent_id": "beta",
+            "evidence_ids": ["MS-000000000002"],
+            "records": [],
+        },
+    )
+    reorder(run)
+    first = score(evaluator(tmp_path, ref), run)["edge_judgments"][0]
+    assert first["bypass"]["bypassed"] is True
+    run["events"].insert(
+        4,
+        {
+            "kind": "message",
+            "sender": "alpha",
+            "recipient": "beta",
+            "text": "blue route",
+        },
+    )
+    reorder(run)
+    assert (
+        score(evaluator(tmp_path, ref), run)["edge_judgments"][0]["bypass"]["bypassed"]
+        is False
+    )
+
+
+def test_incomplete_assignment_is_an_error_not_a_failed_stage(tmp_path):
+    run = record()
+    del run["events"][5]["inputs"]
+    with pytest.raises(ValueError, match="Incomplete assignment"):
+        score(evaluator(tmp_path), run)
+
+
+def test_successful_edge_cannot_hide_an_unassigned_edge_in_another_query(tmp_path):
+    row = score(evaluator(tmp_path))
+    other = copy.deepcopy(row)
+    other["task_id"] = "task_b"
+    other["edge_judgments"] = [other["edge_judgments"][0]]
+    other["edge_judgments"][0]["stages"] = [True, False, False, False, False]
+    report = aggregate([row, other])
+    assert report["dependency_counts"] == [3, 2, 2, 2, 2]
+    assert report["task_orchestration"] == pytest.approx(200 / 3)
+    assert report["dependency_survival"] == pytest.approx(200 / 3)

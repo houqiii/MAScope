@@ -62,3 +62,34 @@ def test_truncated_response_retains_reported_cost(dataset):
     assert usage["tokens"] == 60
     assert usage["calls_with_unknown_usage"] == 0
     assert usage["phases"]["planning"] == {"input_tokens": 20, "output_tokens": 40}
+
+
+def test_native_tool_calls_preserve_usage(monkeypatch):
+    message = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": "c1",
+                "type": "function",
+                "function": {"name": "retrieve", "arguments": '{"query":"route"}'},
+            }
+        ],
+    }
+
+    def response(request, timeout):
+        assert json.loads(request.data)["tools"][0]["function"]["name"] == "retrieve"
+        return BytesIO(
+            json.dumps(
+                {
+                    "choices": [{"finish_reason": "tool_calls", "message": message}],
+                    "usage": {"prompt_tokens": 10, "completion_tokens": 3},
+                }
+            ).encode()
+        )
+
+    monkeypatch.setattr("urllib.request.urlopen", response)
+    result = OpenAICompatible("example", api_key="fixture").complete(
+        [], tools=[{"type": "function", "function": {"name": "retrieve"}}]
+    )
+    assert result.message == message and result.input_tokens == 10

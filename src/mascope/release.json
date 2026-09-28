@@ -1,18 +1,18 @@
 {
   "schema_version": "1.0",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "components": {
     "runtime": {
-      "filename": "mascope-runtime-1.1.0.tar.gz",
-      "size": 79464193,
-      "sha256": "ef0a87d78ba9d181a8ffc73bac2f2a2370edc5a2783f56552acd9e7018e7ff80",
-      "url": "https://api.github.com/repositories/1375363156/releases/assets/571798248"
+      "filename": "mascope-runtime-2.0.0.tar.gz",
+      "size": 77513219,
+      "sha256": "d666778e7277be40d2030b4c1fa79b9477fe81a8ce4aa840252022339cc81a4b",
+      "url": "https://api.github.com/repositories/1375363156/releases/assets/595548796"
     },
     "evaluator": {
-      "filename": "mascope-evaluator-1.1.0.tar.gz",
-      "size": 8711296,
-      "sha256": "03269109fc31fe081233be70352af4014aee0958a7b598241f1279b7d6970962",
-      "url": "https://api.github.com/repositories/1375363156/releases/assets/571798246"
+      "filename": "mascope-evaluator-2.0.0.tar.gz",
+      "size": 16474692,
+      "sha256": "ae0c29f1ec32b599c83ea6e1b9ea5c3277a17aee4d3809a3fe6b966a2c5dc913",
+      "url": "https://api.github.com/repositories/1375363156/releases/assets/595548812"
     }
   }
 }

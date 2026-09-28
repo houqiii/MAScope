@@ -47,13 +47,15 @@ class OpenAICompatible:
         if not self.api_key:
             raise ValueError("Set OPENAI_API_KEY")
 
-    def complete(self, messages, max_tokens=4096, json_output=False):
+    def complete(self, messages, max_tokens=4096, json_output=False, tools=None):
         payload = {
             "model": self.model,
             "messages": messages,
             "max_tokens": max_tokens,
             **self.decoding,
         }
+        if tools is not None:
+            payload["tools"] = tools
         if json_output:
             payload["response_format"] = {"type": "json_object"}
         request = urllib.request.Request(
@@ -80,7 +82,30 @@ class OpenAICompatible:
         choices = data.get("choices", [])
         if not choices or choices[0].get("finish_reason") == "length":
             raise ResponseError("Missing or truncated model response", counts)
+        if tools is not None:
+            message = choices[0]["message"]
+            if not isinstance(message.get("content"), str) and not message.get(
+                "tool_calls"
+            ):
+                raise ResponseError("Expected text or tool calls", counts)
+            return ToolCompletion(
+                message, measured.input_tokens, measured.output_tokens
+            )
         text = choices[0]["message"].get("content")
         if not isinstance(text, str):
             raise ResponseError("Expected a text response", counts)
         return Completion(text, usage["prompt_tokens"], usage["completion_tokens"])
+
+
+@dataclass(frozen=True)
+class ToolCompletion:
+    message: dict
+    input_tokens: int
+    output_tokens: int
+
+    def __post_init__(self):
+        Completion("", self.input_tokens, self.output_tokens)
+
+    @property
+    def text(self):
+        return self.message.get("content") or ""

@@ -1,0 +1,20 @@
+{
+  "order": "8",
+  "method": "MoA-P",
+  "display": "MoA",
+  "class": "semi",
+  "team_rule": "every agent proposes; no staffing step",
+  "structure": "three layers; each agent sees every output of the layer before",
+  "stop_rule": "the final aggregator returns",
+  "mapping": {
+    "method": "MoA-P",
+    "recruit": "every agent, as a proposer of the first layer",
+    "assign": "a layer's prompt to an agent, carrying every output of the previous layer",
+    "aggregate": "the final aggregator's synthesis",
+    "submit": "the aggregator's output"
+  },
+  "layers": 3,
+  "pool_size": 51,
+  "native_revision": null,
+  "fixture_verified": true
+}

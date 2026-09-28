@@ -1,0 +1,18 @@
+{
+  "order": "3",
+  "method": "Flow",
+  "display": "Flow",
+  "class": "central",
+  "team_rule": "subtask nodes are allocated to experts from the pool",
+  "structure": "explicit subtask graph, updated during execution",
+  "stop_rule": "every node of the graph is complete",
+  "mapping": {
+    "method": "Flow",
+    "recruit": "a worker allocated a node of the subtask graph",
+    "assign": "a node dispatched to its worker with the outputs of the nodes it depends on",
+    "aggregate": "a graph update merging completed nodes",
+    "submit": "the output of the last node"
+  },
+  "native_revision": null,
+  "fixture_verified": true
+}

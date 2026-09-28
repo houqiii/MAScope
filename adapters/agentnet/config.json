@@ -1,0 +1,19 @@
+{
+  "order": "11",
+  "method": "AgentNet-P",
+  "display": "AgentNet",
+  "class": "decentral",
+  "team_rule": "agents route to one another",
+  "structure": "each agent's router forwards, splits or executes",
+  "stop_rule": "an agent returns a final answer",
+  "mapping": {
+    "method": "AgentNet-P",
+    "recruit": "an agent the router forwards or splits a task to",
+    "assign": "the forwarded task, unchanged, or the split with the parts already done",
+    "aggregate": "an agent's merge of what returns to it",
+    "submit": "an agent's final answer"
+  },
+  "cross_query_memory": false,
+  "native_revision": null,
+  "fixture_verified": true
+}

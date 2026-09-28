@@ -41,7 +41,7 @@ def dataset(tmp_path):
         ("beta", "The maximum load is five units."),
     ]:
         row = {
-            "evidence_id": f"{agent}:1:2",
+            "evidence_id": "MS-000000000001" if agent == "alpha" else "MS-000000000002",
             "agent_id": agent,
             "title": "Route limit",
             "text": text,

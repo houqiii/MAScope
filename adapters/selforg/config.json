@@ -1,0 +1,21 @@
+{
+  "order": "12",
+  "method": "SelfOrg",
+  "display": "SelfOrg",
+  "class": "decentral",
+  "team_rule": "every agent answers; no staffing step",
+  "structure": "contribution-scored DAG rebuilt each round routes peer responses",
+  "stop_rule": "three rounds end and the most central response is chosen",
+  "mapping": {
+    "method": "SelfOrg",
+    "recruit": "every agent of the pool, which answers the query in round 0",
+    "assign": "the next-round prompt carrying the responses of an agent's predecessors in the contribution-scored DAG",
+    "aggregate": "the contribution-weighted centroid that selects one existing response",
+    "submit": "the selected response after the last round"
+  },
+  "pool_size": 51,
+  "top_k": 2,
+  "max_rounds": 3,
+  "native_revision": null,
+  "fixture_verified": true
+}

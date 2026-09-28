@@ -1,2 +1,4 @@
 recursive-include assets *.png *.pdf
 recursive-include docs *.md
+
+recursive-include adapters *.py *.json *.md

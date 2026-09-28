@@ -1,54 +1,62 @@
 # Evaluation
 
-MAScope reports outcome, expert selection, progress along the complete dependency graph, and execution cost. Every score records its dataset version, scorer version and reference hash. Results produced with different contracts must not be pooled.
-
-## Deterministic evaluation
+MAScope evaluates final answers and collaboration traces using frozen source identifiers and literal term variants. No model participates in acceptance or stage decisions. Every result records the dataset version, reference version, reference hash and scorer version.
 
 ```bash
-mascope verify-references --annotations /path/to/frozen-references
+mascope verify-references --annotations data/evaluator
 mascope evaluate \
   --runtime data/runtime \
-  --annotations /path/to/frozen-references \
+  --annotations data/evaluator \
   --runs results/run-1 \
   --out results/eval-1
 ```
 
-The default scorer makes no model calls. Supply schema 2.0 references with frozen source identifiers and term variants as described in [Reference format](reference-format.md). The v1.1.0 download provides semantic-scoring annotations; schema 2.0 annotations must be supplied separately. Missing or invalid rules stop evaluation.
+The evaluator requires schema 2.0 [frozen references](reference-format.md). Missing rules, inconsistent families or invalid checksums stop evaluation. See [Data](data.md#evaluation-inputs) for archive contents.
 
-Each unit has one or more acceptance alternatives. An alternative requires at least one of its exact source identifiers and at least one registered surface variant from **every** term group. The identifier and terms must occur in the submitted answer. Matching is literal and case-sensitive: case, inflection and quantity variants must be listed explicitly. Alternatives are evaluated independently; terms from one cannot be combined with the identifier of another. Match records contain the accepted identifier and the exact matched terms and offsets. Unregistered paraphrases are misses.
+## Acceptance and coverage
 
-## Outcome and expert selection
+For unit u of query q, b(q,u) is one if the answer contains an accepted exact source identifier and at least one registered variant from each required term group. Alternatives are checked independently: an identifier from one alternative cannot be combined with terms from another. Matching is literal and case-sensitive. Case, inflection and quantity variants must be listed before execution; no paraphrases are inferred while scoring.
 
-| Field | Definition |
+- Query success is one exactly when every required unit passes b(q,u).
+- Query evidence coverage is the fraction of its units that pass the same predicate.
+- Aggregate success and coverage are arithmetic means over queries.
+
+A failed query can therefore retain partial coverage. Acceptance checks specified content and provenance; it does not judge the reasoning that connects the contributions. Match records retain source identifiers, matched variants and character offsets.
+
+## Expert selection
+
+Let Rq be the required expert roles and Aq the distinct recruited agents for query q.
+
+| Metric | Definition |
 | --- | --- |
-| `success` | Percentage of queries for which every required unit passes acceptance |
-| `evidence_coverage` | Mean percentage of accepted units per query |
-| `expert_recall` | Mean, over queries, of matched required expert roles / required roles |
-| `expert_precision` | Mean, over queries, of matched required expert roles / distinct recruited agents |
-| `mean_calls` | Mean attempted model calls per query |
-| `mean_tokens` | Mean input plus output tokens across all model-call phases |
+| Expert recall | (100 / N) × Σq matched roles(q) / \|Rq\| |
+| Expert precision | (100 / N) × Σq matched roles(q) / \|Aq\| |
 
-Success and coverage use the **same unit predicate**. A failed query can have positive coverage. Recall and precision are macro averages across queries, not ratios of pooled expert counts. Recruiting nobody gives zero selection precision. Equivalent experts are represented as alternatives for a required role; a maximum one-to-one matching prevents one agent receiving credit for multiple roles or several equivalents receiving repeated credit for one role.
+Both are **query-macro averages**. Precision is zero when no agent is recruited. Equivalent experts are alternatives for one role; maximum one-to-one matching prevents duplicate credit. High recall from recruiting the entire pool does not imply high precision. Neither selection metric enters the dependency-stage denominators.
 
-Per-task `evidence_coverage` is a fraction; aggregate rates are percentages. Empty conditional denominators produce `null`.
+## Dependency stages
 
-## The full dependency graph
+Every edge ui → uj in `requirements[].depends_on` is scored independently. The complete benchmark specification contains 3,664 edge occurrences over 1,630 dependent queries. The scorer uses the actual graph in each validated reference, rather than a hard-coded edge count or a selected representative edge.
 
-All edges in `requirements[].depends_on` are evaluated. No representative edge is selected. Each edge has five nested stages:
-
-| Stage | Trace predicate |
+| Stage | Predicate on one edge |
 | --- | --- |
-| Ready | A predecessor local output is available and an eligible downstream expert has been recruited |
-| Task orchestration | A later assignment to that expert contains the successor's registered objective terms |
-| Information transfer | That assignment carries the predecessor output, its accepted identifier and constraint terms |
-| Local solve | The assigned expert subsequently produces the successor result with accepted source and terms |
-| Result integration | The final answer contains the successor identifier and terms |
+| 1 · Ready | The team holds ui's finding and has recruited an expert for uj |
+| 2 · Task orchestration | A later assignment to that expert contains uj's registered objective terms |
+| 3 · Information transfer | All context visible to the recipient contains ui's identifier and required constraint terms |
+| 4 · Local solve | The assigned expert produces uj with accepted identifier and preregistered terms |
+| 5 · Result integration | The final answer contains uj's accepted identifier and terms |
 
-The native runtime records assignments as `work_start`, local outputs as `contribution`, and submission as `final`. A message alone is not an assignment or delivered input. Carried artifacts are checked against the original contribution. Local outputs belong to the interval after their assignment and before the next assignment to that expert. Repeated attempts are allowed: the deepest valid execution of an edge is retained. A local output without citations can match by its registered terms; an output with an incorrect citation does not receive this fallback. Final answers always require identifiers.
+A root unit is held after its owning expert retrieves its source. A unit with predecessors becomes available to subsequent work only after its incoming dependencies pass local solve. This prevents an upstream failure being charged again to successors that never became ready. Final integration is not required to make a local finding available to later work.
 
-A query reaches stage k only if **every edge** reaches stage k. Let n1 through n5 count queries reaching the five stages:
+Assignments are `assign` events, local outputs are `local_output` events, and submission is a `submit` event. The earlier `work_start`, `contribution` and `final` names are accepted as input aliases. A group assignment identifies its recipients in `agent_ids`; it is evaluated for each eligible recipient. Carried artifacts must match previously recorded contributions. An output belongs to the interval after its assignment and before the expert's next assignment. Repeated attempts retain the deepest valid progression; readiness propagates from the earliest valid local result.
 
-| Field | Ratio |
+An uncited local output may match its preregistered terms when they uniquely identify the relevant unit. A wrong citation does not receive this fallback, and final acceptance always requires identifiers. An uncited output that remains ambiguous after matching is marked `undecided`, with a reason. Undecided edges are reported separately and excluded from both sides of the conditional ratios. Invalid or incomplete trace records are not silently converted to failures.
+
+## Edge aggregation
+
+Let nk count **decided edges**, across evaluated queries, that reach stage k.
+
+| Output field | Value |
 | --- | --- |
 | `task_orchestration` | 100 × n2 / n1 |
 | `information_transfer` | 100 × n3 / n2 |
@@ -56,28 +64,19 @@ A query reaches stage k only if **every edge** reaches stage k. Let n1 through n
 | `result_integration` | 100 × n5 / n4 |
 | `dependency_survival` | 100 × n5 / n1 |
 
-The four conditional rates multiply to dependency survival when their denominators are nonzero. Edge-level decisions and event locators remain in `edge_judgments`; aggregation uses query-level stages. C1 has an empty graph and does not enter process-rate denominators. Reports also group results by taxonomy cell, structure and expertise scale.
+An edge contributes to a stage's denominator only after reaching the preceding stage. Two ready edges with one assigned produce 50% orchestration, even if they belong to the same query. No all-edges-per-query conjunction is applied. The four conditional rates multiply to dependency survival when all denominators are nonzero. A zero denominator produces `null`.
 
-## Costs and failures
+Reports include `dependency_counts` (n1–n5), `dependency_edges`, `decided_edges`, `undecided_edges`, `not_ready_edges`, and `dependent_queries`. C1 has no edges and does not enter process denominators. Results are also grouped by taxonomy cell, task structure and expertise scale. Expert and outcome metrics remain query averages within each group.
 
-All model calls, including controller, member, synthesis and memory calls, go through `complete`. Provider-reported input and output usage is counted once. Retrieval calls are counted separately in the run record; retrieved text passed to a model is charged through that model's input tokens. No estimated retrieval-token surcharge is added. Deployments with separately billed retrieval must supply their accounting policy alongside the run.
+## Bypass diagnostics
 
-Budget exhaustion retains any answer already submitted and its measured trajectory; no additional synthesis call is inserted. Other runtime errors score as unsuccessful while retaining their trace. Failed calls with missing provider usage leave token cost unknown. If any selected task has unknown usage, aggregate `mean_tokens` is `null`.
+At the first retrieval returning uj or an accepted equivalent to its owning expert, inspect previously received messages, assignments and passages. The edge is bypassed if neither ui's identifier nor any registered bound term was present. The expert's own generated text does not count as received content.
 
-## Semantic evaluation
+Each `edge_judgments[].bypass` records retrieval, the first retrieval event and the bypass decision. Missing bound-term annotations or incomplete passage logs yield an unknown decision rather than a presumed bypass. A later valid handoff can still make a previously bypassed edge pass the stage predicates.
 
-```bash
-mascope evaluate \
-  --runtime data/runtime --annotations data/evaluator \
-  --runs results/run-1 --scorer semantic \
-  --judge-model "$JUDGE_MODEL" --out results/semantic-eval-1
-```
+## Costs and repeated runs
 
-The semantic scorer uses source/trace validation and a configurable content judge for v1.1.0 references. It checks **every annotated edge**, but its outcome predicate and content decisions differ from deterministic acceptance. Correct unsupported content can satisfy a semantic outcome requirement without increasing supported coverage. Its results are marked `semantic-full-graph-2` and are not interchangeable with deterministic results or the earlier single-edge scorer.
-
-The judge must return every unit and every edge exactly once, five nested stage decisions per edge, and real event locators for positive stages. Invalid judgments receive validation feedback, at most three attempts; exhausted attempts produce `.failed.json` and stop evaluation. Judge usage is saved separately from execution cost.
-
-## Repeated runs
+Provider-reported input and output tokens are counted once across planning, members, synthesis and memory. Retrieval calls are recorded separately; retrieved text is included in token usage when supplied to a model. Budget exhaustion retains any submitted answer and measured trace, without adding synthesis. If token usage is unknown for any selected query, aggregate `mean_tokens` is `null`.
 
 ```bash
 mascope summarize \
@@ -85,4 +84,16 @@ mascope summarize \
   --out results/summary.json
 ```
 
-Each repetition must use the same task set, dataset, scorer and reference hashes. Metrics are computed separately per repetition, then summarized by their mean and sample standard deviation. One repetition has no estimated standard deviation. Missing runs or failed judgments are not silently removed. Keep both formulations of each base instance and all instances of a family together when making development splits or resampling tasks.
+Each repetition must use identical task IDs, dataset, scorer and reference hashes. Metrics are computed independently per repetition, then summarized by their mean and sample standard deviation. Missing or failed evaluations cannot be silently excluded. Hold out whole families when tuning and preserve family groups when resampling.
+
+## Additional diagnostics
+
+`cap_hit_share` counts queries reaching either the token cap or the model-call cap. The `by_scale.S3.cap_hit_share` field reports the S3 subset. `bypass.rate` uses all evaluated dependency edges as its denominator; it is null if the trace or annotations leave any bypass decision unknown.
+
+Use `mascope evaluate ... --identifier-free` to rescore the same runs with the identifier requirement removed from final acceptance. The output includes strict success, identifier-free success, the gain in percentage points, and each rule's `dependency_success_drop`: 100 × (success on C1 − success on C2∪C3) / success on C1. A zero C1 success rate gives null. Local stage rules remain unchanged.
+
+Per-query outputs `answered` and `graph_carried` describe final acceptance and whether all edges in a nonempty dependency graph reach stage 5. They do not supply stage-rate denominators.
+
+## Legacy scoring
+
+Schema 1.0 data can be evaluated explicitly with `--scorer semantic --judge-model MODEL`. This optional legacy mode calls a model and is not the deterministic benchmark protocol. The default scorer never contacts a model and rejects `--judge-model`.

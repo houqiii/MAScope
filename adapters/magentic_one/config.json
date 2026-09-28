@@ -1,0 +1,18 @@
+{
+  "order": "2",
+  "method": "Magentic-One",
+  "display": "Magentic-One",
+  "class": "central",
+  "team_rule": "the orchestrator picks from the pool at each step",
+  "structure": "task and progress ledgers, re-planned on a stall",
+  "stop_rule": "the progress ledger marks the request satisfied",
+  "mapping": {
+    "method": "Magentic-One",
+    "recruit": "a specialist the orchestrator names in the task ledger",
+    "assign": "the orchestrator's next-speaker instruction",
+    "aggregate": "a progress-ledger update merging results",
+    "submit": "the orchestrator's final answer"
+  },
+  "native_revision": null,
+  "fixture_verified": true
+}

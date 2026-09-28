@@ -34,7 +34,6 @@ def summarize_runs(runs):
             versions.add(row["dataset_version"])
             identity[row["task_id"]] = (
                 row["family_id"],
-                row["instance_id"],
                 row["cell"],
                 row["required_experts"],
                 row.get("scorer_version", "legacy"),
