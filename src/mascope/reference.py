@@ -47,7 +47,7 @@ def validate_terms(groups, allow_empty=False):
             raise ValueError("Each term needs explicit nonempty surface variants")
 
 
-def validate_reference(reference):
+def validate_reference(reference, require_bindings=False):
     edges = dependency_edges(reference)
     required = reference["required_experts"]
     if not required or len(required) != len(set(required)):
@@ -88,7 +88,11 @@ def validate_reference(reference):
     for unit in units.values():
         bindings = unit.get("dependency_terms")
         if bindings is None:
+            if require_bindings and unit.get("depends_on"):
+                raise ValueError("Dependent units require frozen bound-term records")
             continue
+        if not isinstance(bindings, dict):
+            raise ValueError("Bound-term records must map predecessor IDs to term groups")
         if set(bindings) != set(unit.get("depends_on", [])):
             raise ValueError("Bound-term endpoints disagree with the dependency graph")
         for parent, groups in bindings.items():

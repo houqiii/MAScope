@@ -60,7 +60,7 @@ class DeterministicEvaluator:
         for row in read_jsonl(self.root / "references.jsonl"):
             if row["task_id"] in self.references:
                 raise ValueError("Duplicate reference task")
-            validate_reference(row)
+            validate_reference(row, require_bindings=self.manifest.get("scope") != "subset")
             self.references[row["task_id"]] = row
         if len(self.references) != self.manifest["query_count"]:
             raise ValueError("Reference count disagrees with manifest")

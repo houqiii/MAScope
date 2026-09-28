@@ -5,7 +5,7 @@ import statistics
 from pathlib import Path
 
 from .dataset import Dataset, read_json, read_jsonl, sha256
-from .validation import recompute_families, reference_source_texts
+from .validation import compare_certification_records, recompute_families, reference_source_texts
 from .reference import dependency_edges, fingerprint, validate_reference
 
 
@@ -113,7 +113,7 @@ def verify_paper(runtime, annotations, paper, output):
             except ValueError:
                 invalid.append(r["task_id"])
             try:
-                validate_reference(r)
+                validate_reference(r, require_bindings=True)
                 valid_rules += 1
             except (ValueError, KeyError):
                 pass
@@ -167,6 +167,7 @@ def verify_paper(runtime, annotations, paper, output):
         len(expected_edges),
     )
     check("certificate_duplicates", len(identities) - len(set(identities)), 0)
+    check("certificate_unexpected_edges", len(set(identities) - expected_edges), 0)
     refmap = {r["task_id"]: r for r in refs}
     canonical_sources = reference_source_texts(runtime, refs)
     binding = 0
@@ -208,6 +209,11 @@ def verify_paper(runtime, annotations, paper, output):
     check("rank_with_top8", reached, len(expected_edges))
     check("rank_without_outside_top8", unreachable, len(expected_edges))
     recomputed = recompute_families(dataset, refs)
+    record_checks = compare_certification_records(recomputed, cert)
+    check("certificate_record_consistency", sum(r["passed"] for r in record_checks), len(expected_edges))
+    check("certificate_record_failures", sum(not r["passed"] for r in record_checks), 0)
+    check("certified_structure_labels", sum(r["structure_matched"] for r in recomputed), len(families))
+    check("certified_bound_term_maps", sum(r["bindings_matched"] for r in recomputed), len(families))
     check(
         "certified_family_graphs",
         sum(r["graph_matched"] for r in recomputed),
@@ -343,6 +349,7 @@ def verify_paper(runtime, annotations, paper, output):
         "checks": checks,
         "corpus_pairs": corpus_count,
         "recomputed_families": recomputed,
+        "certificate_record_checks": record_checks,
         "local_solvability_coverage": coverage,
         "certification_summary": {
             "declared_edges": len(expected_edges),

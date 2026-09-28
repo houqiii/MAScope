@@ -257,12 +257,22 @@ def test_family_validation_recomputes_graph_similarity_and_discovery(tmp_path):
     assert row["graph_matched"] and row["discovery_passed"]
     assert row["similarity_pairs"] == row["similarity_violations"] == 3
     assert row["derived_edges"] == [("a", "b")]
+    assert row["structure_matched"] and row["derived_structure"] == "C3"
+    assert len(row["edge_measurements"]) == 3
+    assert all(e["rank_without"] > 8 and e["rank_with"] <= 8 for e in row["edge_measurements"])
+    for reference in references:
+        reference["cell"] = "C2S1"
+    row = recompute_families(Dataset(), references)[0]
+    assert row["graph_matched"] and not row["structure_matched"]
+    for reference in references:
+        reference["cell"] = "C3S1"
     units[1]["depends_on"] = []
     for reference in references:
         reference["status"] = "certified"
     row = recompute_families(Dataset(), references)[0]
     assert not row["graph_matched"]
     assert not row["discovery_passed"]
+    assert row["derived_structure"] == "C3"
     units[1]["depends_on"] = ["a"]
     units[0]["finding"] = "blue_token"
     row = recompute_families(Dataset(), references)[0]
