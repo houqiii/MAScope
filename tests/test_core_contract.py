@@ -26,6 +26,9 @@ def test_core_has_no_adapter_imports_or_framework_registration():
 
 class FixtureModel:
     def complete(self, messages, max_tokens, json_output, tools):
+        if "expert agent for site01," in messages[0]["content"]:
+            assert "30 ms" in messages[1]["content"]
+            assert "MS-000000000001" in messages[1]["content"]
         if messages[-1]["role"] != "tool":
             message = {
                 "role": "assistant",
@@ -51,7 +54,8 @@ class FixtureModel:
         return ToolCompletion(message, 12, 8)
 
 
-def test_51_agent_query_handoff_and_offline_edge_evaluation(tmp_path, monkeypatch):
+@pytest.mark.parametrize("delivery", ["inputs", "message", "memory"])
+def test_51_agent_query_handoff_and_offline_edge_evaluation(tmp_path, monkeypatch, delivery):
     runtime = tmp_path / "runtime"
     (runtime / "corpora").mkdir(parents=True)
     profiles = [
@@ -102,7 +106,14 @@ def test_51_agent_query_handoff_and_offline_edge_evaluation(tmp_path, monkeypatc
 
     def fixture_work(env):
         upstream = env.ask("site00", "check finding")
-        downstream = env.ask("site01", "review limit", inputs=[upstream])
+        inputs = []
+        if delivery == "inputs":
+            inputs = [upstream]
+        elif delivery == "message":
+            env.send("site00", "site01", "Review this limit", [upstream["artifact_id"]])
+        else:
+            env.record_memory("board", "read", [upstream], recipients=["site01"])
+        downstream = env.ask("site01", "review limit", inputs=inputs)
         return upstream["text"] + "\n" + downstream["text"]
 
     record = next(

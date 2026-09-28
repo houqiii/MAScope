@@ -49,3 +49,18 @@ def test_expert_prompt_and_private_corpus(dataset):
     assert all(set(r) == {"evidence_id", "title", "text"} for r in retrieved["records"])
     with pytest.raises(ValueError):
         env.ask("alpha", "work", top_k=3)
+
+
+def test_addressed_messages_and_memory_are_in_the_expert_prompt(dataset):
+    model = ToolModel()
+    env = Environment(dataset, next(iter(dataset)), model)
+    env.send("controller", "alpha", "Use the upstream limit of 30 s")
+    env.send("controller", "beta", "An unrelated private message")
+    env.record_memory("board", "write", ["Unread board item"])
+    env.record_memory("board", "read", ["Read board item"], recipients=["alpha"])
+    env.ask("alpha", "Find the blue route")
+    user = model.seen[0][1]["content"]
+    assert "upstream limit of 30 s" in user and "Read board item" in user
+    assert "Unread board item" not in user and "unrelated private" not in user
+    work = next(e for e in env.export()["events"] if e["kind"] == "assign")
+    assert json.loads(user.split("\n\n", 1)[1]) == work["carried_units"]

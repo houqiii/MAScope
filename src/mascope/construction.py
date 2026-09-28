@@ -122,6 +122,10 @@ def certify_dependencies(queries, units, corpora):
                 )
         for parent, groups in sorted(bindings.items()):
             source = next(u for u in units if u["id"] == parent)
+            if any(not any(v in source["finding"] for v in group) for group in groups):
+                raise ValueError(
+                    "Return group to composition: predecessor finding omits a bound term"
+                )
             objective = target["objective"]
             for group in bindings.values():
                 for variants in group:

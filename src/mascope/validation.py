@@ -65,7 +65,7 @@ def recompute_families(dataset, references):
             "declared_edges": declared,
             "similarity_pairs": len(similarities),
             "similarity_violations": sum(s >= 0.90 for s in similarities),
-            "discovery_passed": bool(declared) and all(discovery),
+            "discovery_profile_passed": bool(declared) and all(discovery),
         }
         try:
             certificate = certify_group(
@@ -82,5 +82,6 @@ def recompute_families(dataset, references):
             )
         except (ValueError, KeyError) as error:
             row.update(graph_matched=False, error=str(error))
+        row["discovery_passed"] = row["discovery_profile_passed"] and row["graph_matched"]
         rows.append(row)
     return rows

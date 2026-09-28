@@ -85,7 +85,8 @@ def test_explicit_input_delivery_and_stable_event_order(dataset):
 
 def test_call_budget_and_failed_provider_usage(dataset):
     environment = Environment(dataset, next(iter(dataset)), Model(), call_budget=1)
-    environment.complete([])
+    with pytest.raises(BudgetExceeded):
+        environment.complete([])
     with pytest.raises(BudgetExceeded):
         environment.complete([])
     assert environment.export()["usage"]["calls"] == 1
@@ -161,6 +162,50 @@ def test_inherited_evidence_requires_actual_input_delivery(dataset):
     assert work["inputs"][0]["agent_id"] == "alpha"
     with pytest.raises(KeyError):
         environment.start_work("beta", "fabricated", inputs=[{"artifact_id": "fake"}])
+
+
+def test_work_context_delivers_messages_and_explicit_carried_content(dataset):
+    env = Environment(dataset, next(iter(dataset)), Model())
+    artifact = env.ask("alpha", "blue route")
+    env.send("alpha", "beta", "Read the route", [artifact["artifact_id"]])
+    env.send("alpha", "controller", "Controller-only information")
+    extra = {"text": "A supplied peer response", "evidence_ids": ["MS-000000000002"]}
+    context = env.start_work("beta", "review", carried_units=[extra])
+    assert context[0]["text"] == "Read the route"
+    assert context[0]["attachments"][0] == artifact
+    assert context[1] == extra
+    assert "Controller-only" not in json.dumps(context)
+    assigned = env.export()["events"][-1]
+    assert assigned["carried_units"] == context
+    assert assigned["inputs"] == []
+    context[0]["attachments"][0]["text"] = "mutated"
+    extra["text"] = "mutated"
+    assert "mutated" not in json.dumps(env.export()["events"][-1])
+    env.contribute("beta", "blue route", ["MS-000000000001"])
+
+
+def test_memory_only_reaches_explicit_readers(dataset):
+    env = Environment(dataset, next(iter(dataset)), Model())
+    item = {"text": "blue route", "evidence_ids": ["MS-000000000001"]}
+    env.record_memory("board", "write", [item], recipients=["beta"])
+    assert env.start_work("beta", "review") == []
+    with pytest.raises(ValueError, match="not retrieved or received"):
+        env.contribute("beta", "blue route", ["MS-000000000001"])
+    env.record_memory("board", "read", [item], recipients=["alpha"])
+    assert env.start_work("beta", "review") == []
+    env.record_memory("board", "read", [item], recipients=["beta"])
+    delivered = env.start_work("beta", "review")
+    assert delivered[0]["content"] == [item]
+    env.contribute("beta", "blue route", ["MS-000000000001"])
+
+
+def test_assignment_text_is_received_content(dataset):
+    env = Environment(dataset, next(iter(dataset)), Model())
+    env.start_work("beta", "Use the blue route [MS-000000000001]")
+    result = env.contribute("beta", "blue route", ["MS-000000000001"])
+    assert result["evidence_ids"] == ["MS-000000000001"]
+    with pytest.raises(KeyError):
+        env.fetch("beta", "MS-000000000001")
 
 
 def test_retrieval_limit_matches_environment(dataset):
@@ -257,3 +302,66 @@ def test_cap_submits_only_the_answer_the_method_already_holds(dataset, tmp_path)
     assert record["answer"]["text"] == "partial result"
     assert record["events"][-1]["kind"] == "submit"
     assert record["usage"]["calls"] == 1
+
+
+@pytest.mark.parametrize("budget", [{"call_budget": 1}, {"token_budget": 30}])
+def test_exact_cap_prevents_new_work_and_answer_replacement(dataset, tmp_path, budget):
+    def agent(env):
+        env.hold_answer("already held")
+        with pytest.raises(BudgetExceeded):
+            env.complete([])
+        with pytest.raises(BudgetExceeded):
+            env.hold_answer("replacement")
+        with pytest.raises(BudgetExceeded):
+            env.search("alpha", "route")
+        with pytest.raises(BudgetExceeded):
+            env.submit("new answer")
+        return "ignored after cap"
+
+    result = next(run(dataset, agent, Model(), tmp_path / "exact", **budget))
+    assert result["status"] == "budget_exhausted"
+    assert result["answer"]["text"] == "already held"
+    assert result["usage"]["calls"] == 1
+    assert result["usage"]["tokens"] == 30
+
+
+def test_cap_submission_waits_for_inflight_usage(dataset):
+    barrier = threading.Barrier(2)
+
+    class ParallelModel:
+        def complete(self, *args):
+            barrier.wait(timeout=3)
+            return Completion("new result", 10, 5)
+
+    env = Environment(dataset, next(iter(dataset)), ParallelModel(), call_budget=2)
+    env.hold_answer("partial answer")
+
+    def call():
+        with pytest.raises(BudgetExceeded):
+            env.complete([])
+        env.submit_at_cap()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        list(executor.map(lambda _: call(), range(2)))
+    result = env.export("budget_exhausted")
+    assert result["usage"]["calls"] == 2
+    assert result["usage"]["tokens"] == 30
+    assert result["events"][-1]["kind"] == "submit"
+    assert sum(e["kind"] == "submit" for e in result["events"]) == 1
+
+
+def test_failed_last_call_still_finalizes_at_the_cap(dataset, tmp_path):
+    from mascope.model import ResponseError
+
+    class TruncatedModel:
+        def complete(self, *args):
+            raise ResponseError("truncated", {"input_tokens": 20, "output_tokens": 10})
+
+    def agent(env):
+        env.hold_answer("retained")
+        env.complete([])
+
+    result = next(run(dataset, agent, TruncatedModel(), tmp_path / "failed_cap", call_budget=1))
+    assert result["status"] == "budget_exhausted"
+    assert result["answer"]["text"] == "retained"
+    assert result["usage"]["tokens"] == 30

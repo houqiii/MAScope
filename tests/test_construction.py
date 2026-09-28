@@ -99,6 +99,13 @@ def test_general_concept_cannot_be_a_bound_term(tmp_path):
         certify_dependencies(["request symptoms"], units, corpora)
 
 
+def test_binding_requires_the_predecessor_finding_to_carry_the_term(tmp_path):
+    units, corpora = candidates(tmp_path)
+    units[0]["finding"] = "blue_token"
+    with pytest.raises(ValueError, match="finding omits"):
+        certify_dependencies(["request symptoms"], units, corpora)
+
+
 def test_reach_records_failure_without_inventing_rank(tmp_path):
     from mascope.construction import reach
 
@@ -214,3 +221,8 @@ def test_family_validation_recomputes_graph_similarity_and_discovery(tmp_path):
     row = recompute_families(Dataset(), references)[0]
     assert not row["graph_matched"]
     assert not row["discovery_passed"]
+    units[1]["depends_on"] = ["a"]
+    units[0]["finding"] = "blue_token"
+    row = recompute_families(Dataset(), references)[0]
+    assert row["discovery_profile_passed"]
+    assert not row["graph_matched"] and not row["discovery_passed"]

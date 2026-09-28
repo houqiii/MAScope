@@ -12,15 +12,15 @@ An agent is a Python callable `solve(environment)` that returns a final-answer s
 | --- | --- |
 | `recruit(agent_id)` | Registers a participating specialist |
 | `ask(agent_id, instruction, inputs=(), top_k=8)` | Runs the frozen expert prompt with a retrieval tool loop and returns a contribution |
-| `start_work(agent_id, instruction, inputs=(), carried_units=())` | Records an assignment and returns the supplied colleague contributions for custom execution |
+| `start_work(agent_id, instruction, inputs=(), carried_units=())` | Records an assignment and returns its complete visible context for custom execution |
 | `search(agent_id, query, limit=8)` | Retrieves at most 8 records from that member's corpus |
 | `fetch(agent_id, evidence_id)` | Reads one record owned by that member |
 | `contribute(agent_id, text, evidence_ids=())` | Records a local contribution and validates its evidence ownership |
-| `send(sender, recipient, text, artifact_ids=())` | Records a message between recruited members or the controller |
+| `send(sender, recipient, text, artifact_ids=())` | Queues a message and resolved contribution attachments for the recipient |
 | `complete(messages, phase="planning", agent_id=None)` | Calls the configured model and records its input, output and usage |
 | `submit(text, artifact_ids=())` | Records the final answer and its supporting contributions |
 
-`ask` accepts contribution IDs or previously returned contribution objects in `inputs`. These inputs are delivered to the receiving member and recorded verbatim. `send` records a communication event; the caller controls when the recipient acts and which messages it receives. Pass the required contributions through `ask(inputs=...)` or include the message contents in the next `complete` call.
+`ask` accepts contribution IDs or previously returned contribution objects in `inputs`. These inputs are delivered to the receiving member and recorded verbatim. `send` queues the message text and resolved attachments for the addressed recipient. Its next `start_work` or `ask` receives these messages alongside explicit inputs and carried content. Queued messages have `delivery="queued"`; they count as read context when included in an assignment. The caller controls when the recipient works. Other recipients’ messages are not included.
 
 `search` ranks question and accepted-answer text using BM25 (k1 = 0.9, b = 0.4), returning the top eight by default. Text is lowercased and tokenized with `[a-z0-9_+#.-]{2,}`; each distinct query term contributes once. Ties, including zero-score ties, are ordered by evidence identifier. Tags do not receive extra weight. The dataset record retains source metadata. Environment retrieval exposes the identifier, question and accepted-answer text. Search never exposes another member's corpus.
 
@@ -44,7 +44,7 @@ The runtime supports concurrent member calls. Shared trace identifiers and usage
 
 ## Budgets and output
 
-The default limits are 2,000,000 tokens and 256 model calls per task. Call admission checks remaining budget; token usage is checked again after each response. A response or concurrent batch that exceeds the token limit stops execution and retains the measured cost. Budget exhaustion is recorded separately; any already submitted answer is scored as it stands. Configure limits with `--token-budget` and `--call-budget`.
+The default limits are 2,000,000 tokens and 256 model calls per task. Call admission checks remaining budget; token usage is checked again after each response. Reaching either limit stops execution at the response boundary and retains the measured cost, including in-flight calls. No further work or answer replacement is allowed after the cap. Budget exhaustion is recorded separately; any already submitted answer is scored as it stands. Configure limits with `--token-budget` and `--call-budget`.
 
 Each run is written atomically as one JSON file. The record contains the dataset version, model identifier, task ID, answer, ordered events, configured budgets, status and usage. Exceptions produce an error record; they do not remove the task from evaluation.
 
@@ -58,7 +58,7 @@ The default transport requests temperature 0.3 and top-p 0.95. `--seed` is forwa
 
 ## Canonical events and visible inputs
 
-Exported traces use `recruit`, `assign`, `message`, `retrieve`, `local_output`, `aggregate`, `memory`, `submit`, and `usage`. An assignment's `carried_units` contains all content actually readable when work begins: delivered messages, supplied peer outputs, and the shared thread or board included in that prompt. A message existing elsewhere in a log does not establish delivery. Use `record_aggregate(text, artifact_ids, actor)` and `record_memory(module, operation, items)` for those events and `complete` for their model costs.
+Exported traces use `recruit`, `assign`, `message`, `retrieve`, `local_output`, `aggregate`, `memory`, `submit`, and `usage`. An assignment's `carried_units` contains all content actually readable when work begins: delivered messages, supplied peer outputs, and the shared thread or board included in that prompt. A message existing elsewhere in a log does not establish delivery. Use `record_aggregate(text, artifact_ids, actor)` and `record_memory(module, operation, items, recipients=())` for those events and `complete` for their model costs. An explicit memory `read` supplies the recorded items to the named recipients and their next work context. A `write` does not deliver content, and an empty recipient list does not broadcast it. Custom execution must pass the full context returned by `start_work` into its member prompt.
 
 `ask` uses the frozen `prompts/expert.txt` and the `retrieve(query)` tool scoped to the selected site. Tool calls, outputs and provider usage are retained. The benchmark supplies no single-agent or multi-agent method implementation.
 

@@ -56,6 +56,8 @@ def run(
         environment = Environment(dataset, task, model, token_budget, call_budget)
         try:
             result = agent(environment)
+            if environment.export()["cap_hit"]:
+                raise BudgetExceeded("Task budget exhausted")
             if environment.export()["answer"] is None and isinstance(result, str):
                 environment.submit(result)
             if environment.export()["answer"] is None:

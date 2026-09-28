@@ -84,7 +84,26 @@ def validate_reference(reference):
             validate_terms(alternative.get("terms"))
     for edge in edges:
         validate_terms(units[edge["to"]].get("objective_terms"))
-        validate_terms(units[edge["from"]].get("constraint_terms"), allow_empty=True)
+        validate_terms(units[edge["from"]].get("constraint_terms"))
+    for unit in units.values():
+        bindings = unit.get("dependency_terms")
+        if bindings is None:
+            continue
+        if set(bindings) != set(unit.get("depends_on", [])):
+            raise ValueError("Bound-term endpoints disagree with the dependency graph")
+        for parent, groups in bindings.items():
+            validate_terms(groups)
+            for group in groups:
+                if not any(
+                    set(group).issubset(variants)
+                    for variants in units[parent]["constraint_terms"]
+                ):
+                    raise ValueError("Predecessor constraints omit a bound-term group")
+                if any(
+                    not any(set(group).issubset(variants) for variants in alt["terms"])
+                    for alt in unit["acceptance"]
+                ):
+                    raise ValueError("Acceptance alternative omits a bound-term group")
     return edges
 
 

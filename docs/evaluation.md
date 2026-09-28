@@ -70,13 +70,13 @@ Reports include `dependency_counts` (n1–n5), `dependency_edges`, `decided_edge
 
 ## Bypass diagnostics
 
-At the first retrieval returning uj or an accepted equivalent to its owning expert, inspect previously received messages, assignments and passages. The edge is bypassed if neither ui's identifier nor any registered bound term was present. The expert's own generated text does not count as received content.
+At the first retrieval returning uj or an accepted equivalent to its owning expert, inspect previously received messages, assignments, passages and explicit shared-memory reads. Queued messages count only once included in readable assignment context; unread memory writes do not count. The edge is bypassed if neither ui's identifier nor any registered bound term was present. The expert's own generated text does not count as received content.
 
 Each `edge_judgments[].bypass` records retrieval, the first retrieval event and the bypass decision. Missing bound-term annotations or incomplete passage logs yield an unknown decision rather than a presumed bypass. A later valid handoff can still make a previously bypassed edge pass the stage predicates.
 
 ## Costs and repeated runs
 
-Provider-reported input and output tokens are counted once across planning, members, synthesis and memory. Retrieval calls are recorded separately; retrieved text is included in token usage when supplied to a model. Budget exhaustion retains any submitted answer and measured trace, without adding synthesis. If token usage is unknown for any selected query, aggregate `mean_tokens` is `null`.
+Provider-reported input and output tokens are counted once across planning, members, synthesis and memory. Retrieval calls are recorded separately; retrieved text is included in token usage when supplied to a model. Reaching either budget cap submits the latest answer retained with `hold_answer`, or an empty answer if none was retained, and preserves the measured trace without adding synthesis. In-flight call usage is recorded before cap submission. If token usage is unknown for any selected query, aggregate `mean_tokens` is `null`.
 
 ```bash
 mascope summarize \

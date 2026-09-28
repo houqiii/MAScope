@@ -47,7 +47,7 @@ Each acceptance alternative lists source identifiers and AND-connected term grou
 }
 ```
 
-The fragment illustrates the format, not a released task. A successor requires nonempty objective terms. A predecessor requires explicit constraint groups, which may be empty when no constraint is required. `dependency_terms` maps each incoming predecessor to the certified bound terms used in bypass diagnosis.
+The fragment illustrates the format, not a released task. A successor requires nonempty objective terms. A predecessor requires nonempty constraint groups. `dependency_terms` maps each incoming predecessor to the certified bound terms used in bypass diagnosis. Each bound-term group must occur in every successor acceptance alternative and in the predecessor’s constraint groups. Binding endpoints must match the dependency graph.
 
 An accepted source identifier has prefix `MS-` and twelve Crockford base-32 characters. Identifiers and literal variants are checked exactly; the evaluator never generates or extends acceptance rules. Equivalent source routes must be recorded explicitly and preserve the certified dependency graph.
 
@@ -61,7 +61,7 @@ Certification checks:
 
 1. Each acceptance term absent from the public queries and downstream source context (question, title and accepted answer) has exactly one supplying unit.
 2. Every downstream source and equivalent is outside the top eight for the query battery without that supplier, and reachable with its finding.
-3. All family queries pass and the resulting graph is acyclic.
+3. All family queries pass, the predecessor finding includes its bound terms, and the resulting graph is acyclic.
 
 The battery contains the whole question, its sentences and the objective stripped of bound terms, plus combinations with other candidates' findings. The saved certificate contains the battery, top-eight positions, input hashes and corpus checksums. A missing source, ambiguous binding, failed reach check or cycle rejects the candidate. Local-solvability runs are separate from certification.
 
@@ -75,3 +75,5 @@ The first command validates rules, checksums and families. The second additional
 `bind_terms(source_id, target_id, groups, units, queries)` checks literal supplier uniqueness and absence from queries. `reach(corpus, evidence_ids, query_group, predecessor_finding)` returns real ranks both with and without the predecessor and records a failed check without replacing ranks with target values. `certify_group` is the strict family gate and rejects a group if any check fails.
 
 `certification/edges.jsonl` stores per-edge measurements. `certification/returns.jsonl` stores construction records and their provenance. Full verification derives family graphs from the current queries, frozen rules and runtime corpora; stored status labels are not used as certification decisions.
+
+C3 discovery is checked on the certified graph: the downstream expert must rank outside the query’s top required-expert count and within the top three for the predecessor finding. A profile-ranking match alone does not certify a dependency.

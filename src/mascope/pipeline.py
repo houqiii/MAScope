@@ -7,7 +7,7 @@ from itertools import combinations
 from .construction import certify_group
 from .dataset import tokens
 from .deterministic import match_unit
-from .reference import fingerprint
+from .reference import fingerprint, validate_reference
 
 
 def minhash(text, permutations=128, seed=20260927):
@@ -156,6 +156,15 @@ def assess_family(candidate, corpora, profiles, validation):
         else "C2"
     )
     scale = "S1" if len(experts) <= 3 else "S2" if len(experts) <= 5 else "S3"
+    try:
+        validate_reference({
+            "requirements": units,
+            "required_experts": experts,
+            "cell": structure + scale,
+        })
+        check("evaluation_rules", True)
+    except ValueError as error:
+        check("evaluation_rules", False, str(error))
     for unit in units:
         samples = validation.get("local_solvability", {}).get(unit["id"], [])
         valid = len(samples) == 10 and all(
@@ -205,7 +214,7 @@ def freeze_family(candidate, assessment):
         raise ValueError("Candidate changed after validation")
     units = assessment["units"]
     experts = sorted({a for u in units for a in u["satisfying_agents"]})
-    return [
+    references = [
         {
             "task_id": q["task_id"],
             "family_id": candidate["family_id"],
@@ -215,6 +224,9 @@ def freeze_family(candidate, assessment):
         }
         for q in candidate["queries"]
     ]
+    for reference in references:
+        validate_reference(reference)
+    return references
 
 
 def release_gate(assessments, expected=None):

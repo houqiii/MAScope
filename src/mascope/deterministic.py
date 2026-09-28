@@ -1,11 +1,12 @@
 import re
 from pathlib import Path
 
+from .context import content_text
 from .dataset import read_json, read_jsonl, sha256
 from .events import normalize_events
 from .reference import expert_hits, fingerprint, validate_families, validate_reference
 
-SCORER_VERSION = "string-edge-2"
+SCORER_VERSION = "string-edge-3"
 
 
 def match_terms(text, groups):
@@ -36,21 +37,7 @@ def _retrieved(event):
 
 
 def _content(event):
-    pieces = [event.get("instruction", ""), event.get("text", "")]
-    pieces.extend(event.get("evidence_ids", event.get("cited_identifiers", [])))
-    for item in (
-        event.get("inputs", [])
-        + event.get("records", [])
-        + event.get("carried_units", [])
-    ):
-        if isinstance(item, str):
-            pieces.append(item)
-            continue
-        pieces.extend(
-            [item.get("title", ""), item.get("text", ""), item.get("evidence_id", "")]
-        )
-        pieces.extend(item.get("evidence_ids", []))
-    return "\n".join(pieces)
+    return content_text(event)
 
 
 class DeterministicEvaluator:
@@ -130,6 +117,24 @@ class DeterministicEvaluator:
         }
         recruits = {}
         artifacts = {}
+
+        def check_artifacts(value):
+            if isinstance(value, list):
+                for item in value:
+                    check_artifacts(item)
+            elif isinstance(value, dict):
+                if "artifact_id" in value:
+                    original = artifacts.get(value["artifact_id"])
+                    if original is None or any(
+                        value.get(k) != original.get(k)
+                        for k in ("text", "agent_id", "evidence_ids")
+                    ):
+                        raise ValueError(
+                            "Carried contribution disagrees with its original output"
+                        )
+                for key in ("inputs", "carried_units", "attachments", "content"):
+                    check_artifacts(value.get(key))
+
         for i, event in enumerate(events):
             if event["kind"] == "recruit":
                 recruits.setdefault(event["agent_id"], i)
@@ -137,16 +142,15 @@ class DeterministicEvaluator:
                 if event["artifact_id"] in artifacts:
                     raise ValueError("Duplicate contribution identifier")
                 artifacts[event["artifact_id"]] = event
-            if event["kind"] == "work_start":
-                for carried in event.get("inputs", []):
-                    original = artifacts.get(carried.get("artifact_id"))
-                    if original is None or any(
-                        carried.get(k) != original.get(k)
-                        for k in ("text", "agent_id", "evidence_ids")
-                    ):
-                        raise ValueError(
-                            "Carried contribution disagrees with its original output"
-                        )
+            if event["kind"] == "work_start" and any(
+                not isinstance(item, dict) or "artifact_id" not in item
+                for item in event["inputs"]
+            ):
+                raise ValueError("Carried inputs must identify original contributions")
+            if event["kind"] in {"work_start", "message"}:
+                check_artifacts(event)
+            elif event["kind"] == "memory" and event.get("operation") == "read":
+                check_artifacts(event.get("items"))
 
         def local_match(event, unit):
             citations = event.get("evidence_ids", [])
@@ -360,12 +364,23 @@ class DeterministicEvaluator:
             for earlier in events[:i]:
                 if (
                     earlier["kind"] == "message"
-                    and earlier.get("recipient") == event["agent_id"]
+                    and event["agent_id"] in (
+                        earlier["recipient"]
+                        if isinstance(earlier.get("recipient"), list)
+                        else [earlier.get("recipient")]
+                    )
+                    and earlier.get("delivery") != "queued"
                 ) or (
                     earlier["kind"] == "work_start"
                     and event["agent_id"] in _recipients(earlier)
                 ):
                     received.append(_content(earlier))
+                if (
+                    earlier["kind"] == "memory"
+                    and earlier.get("operation") == "read"
+                    and event["agent_id"] in earlier.get("recipients", [])
+                ):
+                    received.append(content_text(earlier.get("items", [])))
                 if (
                     earlier["kind"] in {"search", "fetch"}
                     and earlier.get("agent_id") == event["agent_id"]

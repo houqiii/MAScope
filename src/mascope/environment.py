@@ -1,9 +1,11 @@
+import re
 from copy import deepcopy
-from threading import RLock
+from importlib.resources import files
+from threading import Condition, RLock
 
+from .context import content_text
 from .dataset import Task
 from .events import export_events
-from importlib.resources import files
 from .model import ResponseError
 
 ANSWER_FORMAT = (
@@ -31,6 +33,7 @@ class Environment:
         self._artifacts = {}
         self._fetched = {}
         self._received = {}
+        self._inbox = {}
         self._answer = None
         self._held_answer = None
         self.execution_mode = "multi_agent"
@@ -38,6 +41,15 @@ class Environment:
         self._calls = 0
         self._unknown_usage = 0
         self._lock = RLock()
+        self._pending = Condition(self._lock)
+        self._active_calls = 0
+        self._exhausted = False
+
+    def _check_open(self):
+        if self._exhausted:
+            raise BudgetExceeded("Task budget exhausted")
+        if self._answer is not None:
+            raise ValueError("Final answer already submitted")
 
     def profiles(self):
         return self._dataset.profiles()
@@ -54,6 +66,7 @@ class Environment:
 
     def recruit(self, agent_id):
         with self._lock:
+            self._check_open()
             self._dataset.corpus(agent_id)
             if agent_id not in self._members:
                 self._members.add(agent_id)
@@ -87,28 +100,30 @@ class Environment:
         self.recruit(agent_id)
         records = self._passages(self._dataset.corpus(agent_id).search(query, limit))
         with self._lock:
+            self._check_open()
             self._fetched.setdefault(agent_id, set()).update(
                 r["evidence_id"] for r in records
             )
-        event = self._event(
-            "search",
-            agent_id=agent_id,
-            query=query,
-            evidence_ids=[r["evidence_id"] for r in records],
-            records=records,
-        )
-        self._retrieval_usage(event)
+            event = self._event(
+                "search",
+                agent_id=agent_id,
+                query=query,
+                evidence_ids=[r["evidence_id"] for r in records],
+                records=records,
+            )
+            self._retrieval_usage(event)
         return records
 
     def fetch(self, agent_id, evidence_id):
         self.recruit(agent_id)
         record = self._passages([self._dataset.corpus(agent_id).fetch(evidence_id)])[0]
         with self._lock:
+            self._check_open()
             self._fetched.setdefault(agent_id, set()).add(evidence_id)
-        event = self._event(
-            "fetch", agent_id=agent_id, evidence_id=evidence_id, records=[record]
-        )
-        self._retrieval_usage(event)
+            event = self._event(
+                "fetch", agent_id=agent_id, evidence_id=evidence_id, records=[record]
+            )
+            self._retrieval_usage(event)
         return record
 
     def complete(
@@ -125,9 +140,12 @@ class Environment:
         if agent_id is not None:
             self.recruit(agent_id)
         with self._lock:
+            self._check_open()
             if self._calls >= self._call_budget or self._tokens >= self._token_budget:
+                self._exhausted = True
                 raise BudgetExceeded("Task budget exhausted")
             self._calls += 1
+            self._active_calls += 1
             call_id = self._event(
                 "model_start", phase=phase, agent_id=agent_id, messages=messages
             )
@@ -140,6 +158,9 @@ class Environment:
                     messages, output_limit, json_output, tools=tools
                 )
             )
+            input_tokens, output_tokens = reply.input_tokens, reply.output_tokens
+            reply_text = reply.text
+            reply_message = getattr(reply, "message", {})
         except Exception as exc:
             with self._lock:
                 counts = exc.usage if isinstance(exc, ResponseError) else {}
@@ -154,38 +175,51 @@ class Environment:
                     error_type=type(exc).__name__,
                     **counts,
                 )
+                self._active_calls -= 1
+                self._pending.notify_all()
+                if self._calls >= self._call_budget or self._tokens >= self._token_budget:
+                    self._exhausted = True
+                    raise BudgetExceeded("Task budget exhausted") from exc
             raise
         with self._lock:
-            self._tokens += reply.input_tokens + reply.output_tokens
+            self._tokens += input_tokens + output_tokens
             self._event(
                 "model_end",
                 call_id=call_id,
                 phase=phase,
                 agent_id=agent_id,
-                text=reply.text,
-                tool_calls=getattr(reply, "message", {}).get("tool_calls", []),
-                input_tokens=reply.input_tokens,
-                output_tokens=reply.output_tokens,
+                text=reply_text,
+                tool_calls=reply_message.get("tool_calls", []),
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
             )
-            if self._tokens > self._token_budget:
-                raise BudgetExceeded("Measured task tokens exceeded the budget")
-            return reply.text if tools is None else reply.message
+            self._active_calls -= 1
+            self._pending.notify_all()
+            if self._calls >= self._call_budget or self._tokens >= self._token_budget:
+                self._exhausted = True
+                raise BudgetExceeded("Task budget exhausted")
+            return reply_text if tools is None else reply_message
 
     def send(self, sender, recipient, text, artifact_ids=()):
         if sender != "controller" and sender not in self._members:
             raise ValueError("Sender has not been recruited")
         if recipient != "controller":
             self.recruit(recipient)
-        for artifact_id in artifact_ids:
-            if artifact_id not in self._artifacts:
-                raise KeyError("Unknown contribution")
-        self._event(
-            "message",
-            sender=sender,
-            recipient=recipient,
-            text=text,
-            artifact_ids=list(artifact_ids),
-        )
+        with self._lock:
+            self._check_open()
+            attachments = [deepcopy(self._artifacts[a]) for a in artifact_ids]
+            payload = {"text": text, "attachments": attachments}
+            event_id = self._event(
+                "message",
+                sender=sender,
+                recipient=recipient,
+                artifact_ids=list(artifact_ids),
+                delivery="queued",
+                **payload,
+            )
+            self._inbox.setdefault(recipient, []).append(
+                {"event_id": event_id, **payload}
+            )
 
     def contribute(self, agent_id, text, evidence_ids=()):
         self.recruit(agent_id)
@@ -196,6 +230,7 @@ class Environment:
         if not set(evidence_ids).issubset(available):
             raise ValueError("Contribution cites evidence not retrieved or received")
         with self._lock:
+            self._check_open()
             artifact_id = f"a{len(self._artifacts) + 1:06d}"
             artifact = {
                 "artifact_id": artifact_id,
@@ -209,20 +244,27 @@ class Environment:
 
     def start_work(self, agent_id, instruction, inputs=(), carried_units=()):
         self.recruit(agent_id)
-        context = []
-        for item in inputs:
-            artifact_id = item if isinstance(item, str) else item["artifact_id"]
-            context.append(deepcopy(self._artifacts[artifact_id]))
-        self._event(
-            "work_start",
-            agent_id=agent_id,
-            instruction=instruction,
-            inputs=context,
-            carried_units=[*context, *carried_units],
-        )
         with self._lock:
+            self._check_open()
+            contributions = []
+            for item in inputs:
+                artifact_id = item if isinstance(item, str) else item["artifact_id"]
+                contributions.append(deepcopy(self._artifacts[artifact_id]))
+            context = deepcopy(
+                [*contributions, *self._inbox.get(agent_id, []), *carried_units]
+            )
+            self._event(
+                "work_start",
+                agent_id=agent_id,
+                instruction=instruction,
+                inputs=contributions,
+                carried_units=context,
+            )
             self._received.setdefault(agent_id, set()).update(
-                ref for artifact in context for ref in artifact["evidence_ids"]
+                re.findall(
+                    r"\bMS-[0-9A-Z]{12}\b",
+                    content_text({"instruction": instruction, "carried_units": context}),
+                )
             )
         return context
 
@@ -234,41 +276,64 @@ class Environment:
         return specialist(self, agent_id, instruction, inputs)
 
     def record_memory(self, module, operation, items, recipients=()):
-        return self._event(
-            "memory",
-            module=module,
-            operation=operation,
-            items=items,
-            recipients=list(recipients),
-        )
+        recipients = list(recipients)
+        with self._lock:
+            self._check_open()
+            if operation == "read":
+                for recipient in recipients:
+                    if recipient != "controller":
+                        self._dataset.corpus(recipient)
+            event_id = self._event(
+                "memory",
+                module=module,
+                operation=operation,
+                items=items,
+                recipients=recipients,
+            )
+            if operation == "read":
+                for recipient in recipients:
+                    self._inbox.setdefault(recipient, []).append(
+                        {"event_id": event_id, "content": deepcopy(items)}
+                    )
+                    self._received.setdefault(recipient, set()).update(
+                        re.findall(r"\bMS-[0-9A-Z]{12}\b", content_text(items))
+                    )
+            return event_id
 
     def record_aggregate(self, text, artifact_ids=(), actor="controller"):
-        if not set(artifact_ids).issubset(self._artifacts):
-            raise ValueError("Unknown supporting contribution")
-        return self._event(
-            "aggregate",
-            actor=actor,
-            inputs=[deepcopy(self._artifacts[a]) for a in artifact_ids],
-            output=text,
-        )
+        with self._lock:
+            self._check_open()
+            if not set(artifact_ids).issubset(self._artifacts):
+                raise ValueError("Unknown supporting contribution")
+            return self._event(
+                "aggregate",
+                actor=actor,
+                inputs=[deepcopy(self._artifacts[a]) for a in artifact_ids],
+                output=text,
+            )
 
     def hold_answer(self, text):
         if not isinstance(text, str):
             raise ValueError("Held answer must be text")
-        self._held_answer = text
+        with self._lock:
+            self._check_open()
+            self._held_answer = text
 
     def submit_at_cap(self):
-        if self._answer is None:
-            text = self._held_answer or ""
-            self._answer = {"text": text, "artifact_ids": []}
-            self._event("final", **self._answer, reason="budget_exhausted")
+        with self._pending:
+            self._exhausted = True
+            self._pending.wait_for(lambda: self._active_calls == 0)
+            if self._answer is None:
+                text = self._held_answer or ""
+                self._answer = {"text": text, "artifact_ids": []}
+                self._event("final", **self._answer, reason="budget_exhausted")
 
     def submit(self, text, artifact_ids=()):
         if not isinstance(text, str) or not text.strip():
             raise ValueError("Final answer must be nonempty text")
-        with self._lock:
-            if self._answer is not None:
-                raise ValueError("Final answer already submitted")
+        with self._pending:
+            self._pending.wait_for(lambda: self._active_calls == 0)
+            self._check_open()
             if not set(artifact_ids).issubset(self._artifacts):
                 raise ValueError("Unknown supporting contribution")
             self._answer = {"text": text, "artifact_ids": list(artifact_ids)}

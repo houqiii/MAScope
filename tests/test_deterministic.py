@@ -33,7 +33,6 @@ def reference():
     return {
         "task_id": "task_a",
         "family_id": "f",
-        "instance_id": "i",
         "cell": "C2S1",
         "required_experts": ["alpha", "beta", "gamma"],
         "requirements": units,
@@ -177,6 +176,40 @@ def test_delivery_requires_real_carried_inputs(tmp_path):
     run["events"][5]["inputs"][0]["text"] = "invented"
     with pytest.raises(ValueError, match="Carried"):
         score(ev, run)
+
+
+def test_nested_visible_context_counts_but_metadata_does_not(tmp_path):
+    ev = evaluator(tmp_path)
+    run = record()
+    work = run["events"][5]
+    finding = work["inputs"].pop()
+    work["carried_units"] = [{"text": "Use this finding", "attachments": [finding]}]
+    assert score(ev, run)["edge_judgments"][0]["stages"] == [True] * 5
+    work["carried_units"] = [{"content": [finding]}]
+    assert score(ev, run)["edge_judgments"][0]["stages"] == [True] * 5
+    work["carried_units"][0]["content"][0]["text"] = "altered blue route"
+    with pytest.raises(ValueError, match="Carried"):
+        score(ev, run)
+    work["carried_units"] = [{"metadata": finding}]
+    assert score(ev, run)["edge_judgments"][0]["stages"][2] is False
+
+
+def test_frozen_bindings_must_agree_with_acceptance_and_transfer_constraints(tmp_path):
+    from mascope.reference import validate_reference
+
+    ref = reference()
+    child = ref["requirements"][1]
+    child["dependency_terms"] = {"r1": [["blue route"]]}
+    with pytest.raises(ValueError, match="Acceptance alternative"):
+        validate_reference(ref)
+    child["acceptance"][0]["terms"].append(["blue route"])
+    validate_reference(ref)
+    ref["requirements"][0]["constraint_terms"] = [["unrelated"]]
+    with pytest.raises(ValueError, match="Predecessor constraints"):
+        validate_reference(ref)
+    child["dependency_terms"] = {"r3": [["blue route"]]}
+    with pytest.raises(ValueError, match="endpoints"):
+        validate_reference(ref)
 
 
 def test_local_result_must_follow_assignment_and_precede_next(tmp_path):
@@ -351,6 +384,7 @@ def test_uncited_ambiguous_output_is_not_a_failure(tmp_path):
 def test_bypass_only_considers_received_content(tmp_path):
     ref = reference()
     ref["requirements"][1]["dependency_terms"] = {"r1": [["blue route"]]}
+    ref["requirements"][1]["acceptance"][0]["terms"].append(["blue route"])
     run = record()
     run["events"].insert(
         3,
@@ -388,6 +422,35 @@ def test_bypass_only_considers_received_content(tmp_path):
         score(evaluator(tmp_path, ref), run)["edge_judgments"][0]["bypass"]["bypassed"]
         is False
     )
+
+
+@pytest.mark.parametrize(
+    "event, expected",
+    [
+        ({"kind": "memory", "operation": "read", "recipients": ["beta"],
+          "items": [{"text": "blue route"}]}, False),
+        ({"kind": "memory", "operation": "write", "recipients": ["beta"],
+          "items": [{"text": "blue route"}]}, True),
+        ({"kind": "memory", "operation": "read", "recipients": ["gamma"],
+          "items": [{"text": "blue route"}]}, True),
+        ({"kind": "message", "recipient": ["beta", "gamma"],
+          "text": "Read this", "attachments": [{"text": "blue route"}]}, False),
+        ({"kind": "message", "recipient": "beta", "delivery": "queued",
+          "text": "blue route"}, True),
+    ],
+)
+def test_bypass_uses_only_read_memory_and_delivered_messages(tmp_path, event, expected):
+    ref = reference()
+    ref["requirements"][1]["dependency_terms"] = {"r1": [["blue route"]]}
+    ref["requirements"][1]["acceptance"][0]["terms"].append(["blue route"])
+    run = record()
+    run["events"][3:3] = [event, {
+        "kind": "search", "agent_id": "beta",
+        "evidence_ids": ["MS-000000000002"], "records": [],
+    }]
+    reorder(run)
+    result = score(evaluator(tmp_path, ref), run)
+    assert result["edge_judgments"][0]["bypass"]["bypassed"] is expected
 
 
 def test_incomplete_assignment_is_an_error_not_a_failed_stage(tmp_path):
