@@ -64,7 +64,11 @@ class Environment:
         return [
             {
                 "evidence_id": row["evidence_id"],
-                "title": row.get("question", row["title"]),
+                "title": (
+                    row["title"] + "\n" + row["question"]
+                    if row.get("question")
+                    else row["title"]
+                ),
                 "text": row["text"],
             }
             for row in records

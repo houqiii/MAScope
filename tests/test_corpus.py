@@ -74,3 +74,15 @@ def test_shared_accepted_id_keeps_only_its_actual_parent(tmp_path):
     records = list(accepted_pairs(path, tmp_path / "join.db", "stackoverflow", "2025-06-30", rejected))
     assert [row["question_id"] for row in records] == [1]
     assert [row["question_id"] for row in rejected] == [6]
+
+
+def test_agent_receives_question_title_and_answer_without_author_metadata():
+    from mascope.environment import Environment
+
+    record = {"evidence_id": "MS-000000000001", "title": "Timeout setting",
+              "question": "A request stalls for 30 seconds.", "text": "Check the upstream service.",
+              "attribution": {"user_id": "42"}}
+    passage = Environment._passages([record])[0]
+    assert passage == {"evidence_id": record["evidence_id"],
+                       "title": "Timeout setting\nA request stalls for 30 seconds.",
+                       "text": record["text"]}
