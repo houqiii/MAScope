@@ -88,7 +88,7 @@ def test_unbound_or_ambiguous_reference_cannot_be_certified(tmp_path):
     units, corpora = candidates(tmp_path)
     units[0]["acceptable_evidence"] = []
     units[0]["term_kinds"] = {"30 ms": "quantity"}
-    with pytest.raises(ValueError, match="one supplier"):
+    with pytest.raises(ValueError, match="sources must be nonempty"):
         certify_dependencies(["request symptoms"], units, corpora)
 
 
@@ -138,6 +138,37 @@ def test_binding_rejects_term_present_in_downstream_question():
     result = bind_terms("a", "b", [["30 ms"]], units, ["review symptoms"])
     assert not result["passed"]
     assert result["checks"][0]["suppliers"] == ["a", "b"]
+
+
+def test_equivalent_source_must_support_each_local_acceptance_term(tmp_path):
+    import json
+
+    from mascope.dataset import Corpus
+
+    units, corpora = candidates(tmp_path)
+    evidence = "MS-000000000002"
+    with (tmp_path / "b.jsonl").open("a") as stream:
+        stream.write(json.dumps({"evidence_id": evidence, "agent_id": "b", "title": "blue_token", "text": "unrelated"}) + "\n")
+    corpora["b"] = Corpus(tmp_path / "b.jsonl", "b")
+    units[1]["acceptable_evidence"].append(evidence)
+    with pytest.raises(ValueError, match="unsupported equivalent"):
+        certify_dependencies(["request symptoms"], units, corpora)
+
+
+def test_binding_audit_reads_runtime_not_embedded_reference_text(tmp_path):
+    import json
+
+    from mascope.validation import reference_source_texts
+
+    (tmp_path / "corpora").mkdir()
+    record = {"agent_id": "a", "evidence_id": "MS-000000000001",
+              "title": "source", "question": "known 30 ms", "text": "actual finding"}
+    (tmp_path / "corpora/a.jsonl").write_text(json.dumps(record) + "\n")
+    reference = {"family_id": "f", "requirements": [{"id": "r1", "satisfying_agents": ["a"],
+        "acceptable_evidence": [record["evidence_id"]], "sources": [{"text": "fabricated 99 ms"}]}]}
+    result = reference_source_texts(tmp_path, [reference])
+    assert "30 ms" in result["f", "r1"]
+    assert "99 ms" not in result["f", "r1"]
 
 
 def test_family_validation_recomputes_graph_similarity_and_discovery(tmp_path):

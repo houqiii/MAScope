@@ -1,8 +1,33 @@
 from collections import defaultdict
 from itertools import combinations
+from pathlib import Path
 
-from .construction import certify_group
+from .construction import _source_text, certify_group
+from .dataset import read_jsonl
 from .pipeline import minhash, profile_ranks
+
+
+def reference_source_texts(runtime, references):
+    needed = defaultdict(set)
+    for reference in references:
+        for unit in reference["requirements"]:
+            for agent in unit["satisfying_agents"]:
+                needed[agent].update(unit["acceptable_evidence"])
+    sources = {}
+    for agent, ids in needed.items():
+        for source in read_jsonl(Path(runtime) / "corpora" / (agent + ".jsonl")):
+            if source["evidence_id"] in ids and source["agent_id"] == agent:
+                sources[agent, source["evidence_id"]] = _source_text(source)
+    return {
+        (reference["family_id"], unit["id"]): "\n".join(
+            sources[agent, evidence]
+            for agent in unit["satisfying_agents"]
+            for evidence in unit["acceptable_evidence"]
+            if (agent, evidence) in sources
+        )
+        for reference in references
+        for unit in reference["requirements"]
+    }
 
 
 def recompute_families(dataset, references):

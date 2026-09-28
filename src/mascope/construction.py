@@ -36,6 +36,8 @@ def certify_dependencies(queries, units, corpora):
     source_texts = {}
     passages = {}
     for unit in units:
+        if not unit.get("acceptable_evidence"):
+            raise ValueError("Accepted sources must be nonempty")
         passages[unit["id"]] = [
             (agent, corpora[agent].fetch(evidence))
             for agent in unit["satisfying_agents"]
@@ -59,9 +61,27 @@ def certify_dependencies(queries, units, corpora):
             raise ValueError("Freeze acceptance before certifying dependencies")
         for alternative in alternatives:
             validate_terms(alternative["terms"])
+            evidence_ids = alternative.get(
+                "evidence_ids", target["acceptable_evidence"]
+            )
+            if not evidence_ids or not set(evidence_ids).issubset(
+                target["acceptable_evidence"]
+            ):
+                raise ValueError("Acceptance route must name accepted sources")
             alternative_bindings = {}
+            route_passages = [
+                _source_text(passage)
+                for _, passage in passages[target["id"]]
+                if passage["evidence_id"] in evidence_ids
+            ]
             for variants in alternative["terms"]:
-                if any(v in source_texts[target["id"]] for v in variants):
+                support = [any(v in text for v in variants) for text in route_passages]
+                if any(support) and not all(support):
+                    raise ValueError(
+                        "Return group to composition: acceptance route has "
+                        "unsupported equivalent evidence"
+                    )
+                if all(support):
                     continue
                 visible = [any(v in q for v in variants) for q in queries]
                 if all(visible):

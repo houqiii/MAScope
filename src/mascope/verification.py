@@ -4,9 +4,8 @@ import re
 import statistics
 from pathlib import Path
 
-from .construction import _source_text
 from .dataset import Dataset, read_json, read_jsonl, sha256
-from .validation import recompute_families
+from .validation import recompute_families, reference_source_texts
 from .reference import dependency_edges, fingerprint, validate_reference
 
 
@@ -169,6 +168,7 @@ def verify_paper(runtime, annotations, paper, output):
     )
     check("certificate_duplicates", len(identities) - len(set(identities)), 0)
     refmap = {r["task_id"]: r for r in refs}
+    canonical_sources = reference_source_texts(runtime, refs)
     binding = 0
     reached = 0
     unreachable = 0
@@ -187,7 +187,7 @@ def verify_paper(runtime, annotations, paper, output):
                 u["id"]
                 for u in units.values()
                 if any(
-                    v in "\n".join(_source_text(s) for s in u["sources"])
+                    v in canonical_sources[ref["family_id"], u["id"]]
                     for v in variants
                 )
             ]

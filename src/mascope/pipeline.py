@@ -284,6 +284,14 @@ def prepare_corpus(records, community, key, cap=20000, seed=20260301):
                 "source_url",
                 "content_license",
                 "creation_date",
+                "revision_date",
+                "question_creation_date",
+                "question_revision_date",
+                "question_license",
+                "question_url",
+                "source_snapshot",
+                "accepted",
+                "answer_score",
             )
             if name in record
         }
@@ -299,6 +307,10 @@ def prepare_corpus(records, community, key, cap=20000, seed=20260301):
                         "question_attribution",
                         "source_url",
                         "content_license",
+                        "question_license",
+                        "question_url",
+                        "revision_date",
+                        "question_revision_date",
                     )
                     if name in record
                 },
