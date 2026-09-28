@@ -76,12 +76,54 @@ def test_binding_and_reach_use_frozen_text_and_bm25(tmp_path):
     assert len(result["checks"][0]["queries"]) == 2
     assert result["candidate_pairs"] == 2
     assert result["corpus_sha256"]["a"]
+    for query in result["checks"][0]["queries"]:
+        positions = query["ranks"][0]
+        assert min(positions["rank_without"]) > 8
+        assert min(positions["rank_with"]) <= 8
+        assert positions["passed"]
 
 
 def test_reach_gate_rejects_easy_query_in_any_family_member(tmp_path):
+    from mascope.construction import DependencyCertificationError
+
     units, corpora = candidates(tmp_path)
-    with pytest.raises(ValueError, match="reach"):
+    with pytest.raises(DependencyCertificationError, match="reach") as failure:
         certify_dependencies(["request symptoms", "blue_token"], units, corpora)
+    queries = failure.value.details["queries"]
+    assert len(queries) == 2
+    assert queries[0]["ranks"][0]["passed"]
+    assert not queries[1]["ranks"][0]["passed"]
+    assert min(queries[1]["ranks"][0]["rank_without"]) == 1
+
+
+@pytest.mark.parametrize("term,kind", [
+    ("i.e", "component"), ("e.g.", "configuration_key"),
+    ("https://example.com/reference", "component"), ("0.01", "quantity"),
+])
+def test_bound_term_types_reject_generic_language_links_and_unitless_numbers(term, kind):
+    from mascope.construction import validate_bound_term
+
+    with pytest.raises(ValueError):
+        validate_bound_term([term], kind)
+
+
+def test_explicit_quantity_surface_variants_remain_allowed():
+    from mascope.construction import validate_bound_term
+
+    validate_bound_term(["30 seconds", "thirty seconds"], "quantity")
+    validate_bound_term(["ROS"], "component")
+    validate_bound_term(["SPI1.begin"], "configuration_key")
+
+
+def test_query_battery_preserves_findings_without_blank_duplicate_probes():
+    from mascope.construction import query_battery
+
+    assert query_battery("One. Two.", "Goal") == ["One. Two.", "One.", "Two.", "Goal"]
+    battery = query_battery("Question", "Goal", ["First", "Second"])
+    assert battery == [
+        "Question", "Question First", "Question Second", "Question First Second",
+        "Goal", "Goal First", "Goal Second", "Goal First Second",
+    ]
 
 
 def test_unbound_or_ambiguous_reference_cannot_be_certified(tmp_path):

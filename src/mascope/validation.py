@@ -82,6 +82,8 @@ def recompute_families(dataset, references):
             )
         except (ValueError, KeyError) as error:
             row.update(graph_matched=False, error=str(error))
+            if getattr(error, "details", None) is not None:
+                row["failure_measurement"] = error.details
         row["discovery_passed"] = row["discovery_profile_passed"] and row["graph_matched"]
         rows.append(row)
     return rows

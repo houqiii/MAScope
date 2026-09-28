@@ -114,7 +114,9 @@ def assess_family(candidate, corpora, profiles, validation):
         certificate = certify_group([q["query"] for q in queries], units, corpora)
         check("dependency_certification", True)
     except (ValueError, KeyError) as error:
-        check("dependency_certification", False, str(error))
+        check("dependency_certification", False, {
+            "reason": str(error), "measurement": getattr(error, "details", None),
+        })
     if certificate is None:
         return {
             "family_id": candidate["family_id"],

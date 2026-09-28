@@ -65,6 +65,8 @@ Certification checks:
 
 The battery contains the whole question, its sentences and the objective stripped of bound terms, plus combinations with other candidates' findings. The saved certificate contains the battery, top-eight positions, input hashes and corpus checksums. A missing source, ambiguous binding, failed reach check or cycle rejects the candidate. Local-solvability runs are separate from certification.
 
+Certification also retains the full BM25 positions for every probe in `rank_without` and `rank_with`. A failed reach check raises `DependencyCertificationError`; its `details` records the edge, every family query, its probe battery and measured positions. General abbreviations and source links cannot serve as bound terms, and a quantity requires an explicit unit in its registered variants.
+
 ```bash
 mascope verify-references --annotations "$MASCOPE_REFERENCES"
 mascope verify-references --annotations "$MASCOPE_REFERENCES" --runtime data/runtime --release

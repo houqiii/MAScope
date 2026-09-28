@@ -1,10 +1,41 @@
 import hashlib
 import hmac
 import json
+import re
 
 from .reference import dependency_edges
 
 ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+
+
+class DependencyCertificationError(ValueError):
+    def __init__(self, message, details):
+        super().__init__(message)
+        self.details = details
+
+
+def query_battery(query, objective, other_findings=()):
+    base = [query, *re.split(r"(?<=[.!?])\s+", query), objective]
+    additions = ["", *other_findings, " ".join(other_findings)]
+    return list(dict.fromkeys(
+        text for q in base for finding in additions
+        if (text := (q + " " + finding).strip())
+    ))
+
+
+def validate_bound_term(variants, kind):
+    if kind not in {"quantity", "configuration_key", "version", "component"}:
+        raise ValueError("Bound term lacks a specific registered type")
+    for value in variants:
+        text = value.strip()
+        if text.lower().rstrip(".") in {"i.e", "e.g", "etc", "and", "or", "the"}:
+            raise ValueError("General language cannot be a bound term")
+        if re.search(r"https?://|www\.|\.(?:com|org|net|edu)/", text, re.I):
+            raise ValueError("A source link cannot be a bound term")
+    if kind == "quantity" and not any(
+        re.search(r"\d", v) and re.search(r"[A-Za-z%°µμΩ]", v) for v in variants
+    ):
+        raise ValueError("A quantity bound term requires its unit")
 
 
 def source_identifier(key, community, post, unit_index):
@@ -91,15 +122,7 @@ def certify_dependencies(queries, units, corpora):
                         "Return group to composition: a family query reveals a bound term"
                     )
                 kind = target.get("term_kinds", {}).get(variants[0])
-                if kind not in {
-                    "quantity",
-                    "configuration_key",
-                    "version",
-                    "component",
-                }:
-                    raise ValueError(
-                        "Return group to composition: bound term lacks a specific registered type"
-                    )
+                validate_bound_term(variants, kind)
                 suppliers = [
                     u["id"]
                     for u in units
@@ -136,20 +159,7 @@ def certify_dependencies(queries, units, corpora):
             ]
             query_checks = []
             for query in queries:
-                import re
-
-                base = [query, *re.split(r"(?<=[.!?])\s+", query), objective]
-                battery = list(
-                    dict.fromkeys(
-                        text
-                        for q in base
-                        for text in [
-                            q,
-                            *(q + " " + f for f in other_findings),
-                            q + " " + " ".join(other_findings),
-                        ]
-                    )
-                )
+                battery = query_battery(query, objective, other_findings)
                 ranks = []
                 for agent, passage in passages[target["id"]]:
                     without, with_finding = [], []
@@ -158,31 +168,27 @@ def certify_dependencies(queries, units, corpora):
                             (text, without),
                             (text + " " + source["finding"], with_finding),
                         ]:
-                            retrieved = [
-                                r["evidence_id"]
-                                for r in corpora[agent].search(phrase, 8)
-                            ]
-                            result.append(
-                                retrieved.index(passage["evidence_id"]) + 1
-                                if passage["evidence_id"] in retrieved
-                                else None
-                            )
-                    if any(rank is not None for rank in without) or not any(
-                        rank is not None for rank in with_finding
-                    ):
-                        raise ValueError(
-                            "Return group to composition: dependency fails the retrieval reach check"
-                        )
+                            result.append(corpora[agent].rank(
+                                phrase, [passage["evidence_id"]]
+                            )[passage["evidence_id"]])
                     ranks.append(
                         {
                             "agent_id": agent,
                             "evidence_id": passage["evidence_id"],
-                            "without": without,
-                            "with": with_finding,
+                            "without": [r if r <= 8 else None for r in without],
+                            "with": [r if r <= 8 else None for r in with_finding],
+                            "rank_without": without,
+                            "rank_with": with_finding,
+                            "passed": min(without) > 8 and min(with_finding) <= 8,
                         }
                     )
                 query_checks.append(
                     {"query": query, "battery": battery, "ranks": ranks}
+                )
+            if not all(p["passed"] for q in query_checks for p in q["ranks"]):
+                raise DependencyCertificationError(
+                    "Return group to composition: dependency fails the retrieval reach check",
+                    {"from": parent, "to": target["id"], "queries": query_checks},
                 )
             edges.append({"from": parent, "to": target["id"], "bound_terms": groups})
             checks.append({"from": parent, "to": target["id"], "queries": query_checks})
