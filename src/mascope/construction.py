@@ -132,6 +132,14 @@ def certify_dependencies(queries, units, corpora):
                     raise ValueError(
                         "Return group to composition: bound term must have exactly one supplier"
                     )
+                if not all(
+                    any(v in _source_text(passage) for v in variants)
+                    for _, passage in passages[suppliers[0]]
+                ):
+                    raise ValueError(
+                        "Return group to composition: predecessor equivalent "
+                        "evidence omits a bound term"
+                    )
                 alternative_bindings.setdefault(suppliers[0], []).append(variants)
             if bindings and bindings != alternative_bindings:
                 raise ValueError(
@@ -240,12 +248,18 @@ def bind_terms(source_id, target_id, groups, units, queries):
             key for key, text in sources.items() if any(v in text for v in variants)
         )
         visible = any(v in query for v in variants for query in queries)
+        source_routes_supported = bool(lookup[source_id]["sources"]) and all(
+            any(v in _source_text(source) for v in variants)
+            for source in lookup[source_id]["sources"]
+        )
         checks.append(
             {
                 "variants": variants,
                 "suppliers": suppliers,
                 "visible_in_query": visible,
-                "passed": suppliers == [source_id] and not visible,
+                "source_routes_supported": source_routes_supported,
+                "passed": suppliers == [source_id] and not visible
+                and source_routes_supported,
             }
         )
     return {

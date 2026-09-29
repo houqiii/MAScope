@@ -61,7 +61,7 @@ Certification checks:
 
 1. Each acceptance term absent from the public queries and downstream source context (question, title and accepted answer) has exactly one supplying unit.
 2. Every downstream source and equivalent is outside the top eight for the query battery without that supplier, and reachable with its finding.
-3. All family queries pass, the predecessor finding includes its bound terms, and the resulting graph is acyclic.
+3. All family queries pass, the predecessor finding and every accepted equivalent of its source include the bound terms, and the resulting graph is acyclic.
 
 The battery contains the whole question, its sentences and the objective stripped of bound terms, plus combinations with other candidates' findings. The saved certificate contains the battery, top-eight positions, input hashes and corpus checksums. A missing source, ambiguous binding, failed reach check or cycle rejects the candidate. Local-solvability runs are separate from certification.
 

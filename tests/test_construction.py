@@ -204,6 +204,43 @@ def test_equivalent_source_must_support_each_local_acceptance_term(tmp_path):
         certify_dependencies(["request symptoms"], units, corpora)
 
 
+@pytest.mark.parametrize("equivalent_text,passed", [("ready", False), ("ready 30 ms", True)])
+def test_predecessor_equivalents_must_all_supply_binding(tmp_path, equivalent_text, passed):
+    import json
+
+    from mascope.dataset import Corpus
+
+    units, corpora = candidates(tmp_path)
+    evidence = "MS-000000000002"
+    path = tmp_path / "a.jsonl"
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    rows[0]["text"] += " ready"
+    rows.append({"evidence_id": evidence, "agent_id": "a", "title": "alternative", "text": equivalent_text})
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    corpora["a"] = Corpus(path, "a")
+    units[0]["acceptable_evidence"].append(evidence)
+    units[0]["acceptance"] = [{"terms": [["ready"]]}]
+    if passed:
+        result = certify_dependencies(["request symptoms"], units, corpora)
+        assert result["edges"] == [{"from": "a", "to": "b", "bound_terms": [["30 ms"]]}]
+    else:
+        with pytest.raises(ValueError, match="predecessor equivalent"):
+            certify_dependencies(["request symptoms"], units, corpora)
+
+
+def test_binding_audit_checks_each_predecessor_source():
+    from mascope.construction import bind_terms
+
+    units = [
+        {"id": "a", "sources": [{"text": "limit 30 ms"}, {"text": "ready"}]},
+        {"id": "b", "sources": [{"text": "response"}]},
+    ]
+    result = bind_terms("a", "b", [["30 ms"]], units, ["review symptoms"])
+    assert result["checks"][0]["suppliers"] == ["a"]
+    assert not result["checks"][0]["source_routes_supported"]
+    assert not result["passed"]
+
+
 def test_binding_audit_reads_runtime_not_embedded_reference_text(tmp_path):
     import json
 
