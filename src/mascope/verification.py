@@ -234,11 +234,15 @@ def verify_paper(runtime, annotations, paper, output):
     corpus_ids = {}
     invalid_ids = 0
     over_cap = []
+    invalid_profile_counts = []
+    invalid_profile_tags = []
     for profile in dataset.profiles():
         agent = profile["agent_id"]
         count = 0
+        tags = collections.Counter()
         for record in read_jsonl(Path(runtime) / "corpora" / (agent + ".jsonl")):
             count += 1
+            tags.update(record.get("tags", []))
             complete_questions += (
                 isinstance(record.get("question"), str)
                 and len(record["question"].split()) >= 80
@@ -255,6 +259,13 @@ def verify_paper(runtime, annotations, paper, output):
         corpus_sizes.append(count)
         if count > spec["runtime"]["corpus_cap_pairs"]:
             over_cap.append(agent)
+        if profile.get("corpus_size") != count:
+            invalid_profile_counts.append(agent)
+        expected_tags = sorted(tags, key=lambda tag: (-tags[tag], tag))[:12]
+        if profile.get("tags") != expected_tags:
+            invalid_profile_tags.append(agent)
+    check("profile_corpus_counts", invalid_profile_counts, [])
+    check("profile_top_tags", invalid_profile_tags, [])
     check("corpus_identifier_ownership", invalid_ids, 0)
     check("corpus_size_cap", over_cap, [])
     check("corpus_complete_questions", complete_questions, corpus_count)
@@ -275,7 +286,7 @@ def verify_paper(runtime, annotations, paper, output):
     check(
         "reference_sources_in_runtime",
         sum(
-            all(
+            bool(u["acceptable_evidence"]) and all(
                 corpus_ids.get(e) in u["satisfying_agents"]
                 for e in u["acceptable_evidence"]
             )

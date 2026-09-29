@@ -19,6 +19,7 @@ An agent is a Python callable `solve(environment)` that returns a final-answer s
 | `send(sender, recipient, text, artifact_ids=())` | Queues a message and resolved contribution attachments for the recipient |
 | `complete(messages, phase="planning", agent_id=None)` | Calls the configured model and records its input, output and usage |
 | `submit(text, artifact_ids=())` | Records the final answer and its supporting contributions |
+| `export()` | Returns the dataset version, submitted answer, event trace and usage for evaluation |
 
 `ask` accepts contribution IDs or previously returned contribution objects in `inputs`. These inputs are delivered to the receiving member and recorded verbatim. `send` queues the message text and resolved attachments for the addressed recipient. Its next `start_work` or `ask` receives these messages alongside explicit inputs and carried content. Queued messages have `delivery="queued"`; they count as read context when included in an assignment. The caller controls when the recipient works. Other recipients’ messages are not included.
 

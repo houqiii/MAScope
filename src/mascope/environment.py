@@ -356,6 +356,7 @@ class Environment:
                 {
                     "schema_version": "1.0",
                     "task_id": self.task.task_id,
+                    "dataset_version": self._dataset.manifest["version"],
                     "status": status,
                     "error_type": error_type,
                     "model": getattr(self._model, "model", type(self._model).__name__),

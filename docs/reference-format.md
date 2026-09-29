@@ -78,6 +78,8 @@ The first command validates rules, checksums and families. The second additional
 
 `certification/edges.jsonl` stores per-edge measurements. `certification/returns.jsonl` stores construction records and their provenance. Full verification derives family graphs from the current queries, frozen rules and runtime corpora and compares each saved binding and rank with its recomputed value. Missing, duplicate, unverified or inconsistent edge records fail verification. For multiple accepted passages, `rank_without` is the nearest best rank and `rank_with` is the farthest best rank across the passages. Every passage must pass the top-eight reach condition.
 
+Full verification also checks each profile's corpus size and twelve most frequent tags against the retained records. Tag-frequency ties use alphabetical order. Every required unit must name at least one source identifier in its owning corpus.
+
 C3 discovery is checked on the certified graph: the downstream expert must rank outside the query’s top required-expert count and within the top three for the predecessor finding. A profile-ranking match alone does not certify a dependency.
 
 Verification also checks the structure label of every family. An empty graph yields C1; a nonempty graph that passes discovery across its queries yields C3; the remaining nonempty graphs yield C2.

@@ -4,6 +4,7 @@ import pytest
 
 from mascope import Completion, run
 from mascope.dataset import sha256
+from mascope.environment import Environment
 from mascope.evaluation import Evaluator, aggregate
 
 
@@ -90,6 +91,18 @@ def test_annotation_integrity_and_version_mismatch(dataset, tmp_path):
         f.write("\n")
     with pytest.raises(ValueError, match="integrity"):
         Evaluator(root)
+
+
+def test_environment_export_evaluates_without_runner(dataset, tmp_path):
+    task = next(iter(dataset))
+    environment = Environment(dataset, task, Model())
+    environment.recruit("alpha")
+    environment.submit("blue route MS-000000000001", [])
+    record = environment.export()
+    result = Evaluator(references(tmp_path, dataset)).evaluate(task, record)
+    assert record["dataset_version"] == dataset.manifest["version"]
+    assert result["success"] == 1
+    assert result["calls"] == 0
 
 
 def test_resume_rejects_changed_budget(dataset, tmp_path):
