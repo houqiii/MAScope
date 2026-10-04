@@ -84,6 +84,13 @@ mascope fetch-sources --manifest data/runtime/sources.json --dest data/source-po
 
 This command downloads source posts; the versioned bundles also contain MAScope's composed questions and evaluation annotations.
 
+Check task counts, taxonomy distributions, family membership and dependency graphs:
+
+```bash
+mascope verify-structure --runtime data/runtime --annotations data/evaluator \
+  --spec assets/benchmark_spec.json --out structure_report.json
+```
+
 ### 3. Connect your agent system
 
 Provide an importable callable such as `my_agent:solve`. It receives an `Environment` with the task and the following operations:

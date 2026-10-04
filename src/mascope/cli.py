@@ -15,6 +15,11 @@ from .runner import load_agent, run
 def parser():
     root = argparse.ArgumentParser(prog="mascope")
     commands = root.add_subparsers(dest="command", required=True)
+    structure = commands.add_parser("verify-structure")
+    structure.add_argument("--runtime", required=True)
+    structure.add_argument("--annotations", required=True)
+    structure.add_argument("--spec")
+    structure.add_argument("--out", required=True)
     construct = commands.add_parser("certify-family")
     construct.add_argument("--runtime", required=True)
     construct.add_argument("--candidate", required=True)
@@ -71,6 +76,17 @@ def parser():
 
 def main():
     arguments = parser().parse_args()
+    if arguments.command == "verify-structure":
+        from .structure import verify_structure
+
+        report = verify_structure(arguments.runtime, arguments.annotations, arguments.spec)
+        output = Path(arguments.out)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(report, indent=2) + "\n")
+        print(json.dumps({k: report[k] for k in ["scope", "passed", "failed", "totals"]}, indent=2))
+        if report["failed"]:
+            raise SystemExit(1)
+        return
     if arguments.command == "certify-family":
         from .pipeline import assess_family, freeze_family
 
