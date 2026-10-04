@@ -29,7 +29,7 @@ The environment leaves recruitment, delegation, communication and synthesis to t
 
 The installed benchmark provides the 51 site-agent wrappers, task loading and evaluation. Twelve optional log adapters are listed separately under [`adapters/`](adapters/README.md); they are not imported, registered or executed by the environment. Method implementations are supplied by the user. Data archives are distributed separately.
 
-Data version **2.0.0 is a draft**. Archive availability and validation results are listed in [Data](docs/data.md#release-status).
+Data version **2.0.0 is a draft**. Archive availability is listed in [Data](docs/data.md#release-status).
 
 ## What the measurements distinguish
 
@@ -83,13 +83,6 @@ mascope fetch-sources --manifest data/runtime/sources.json --dest data/source-po
 ```
 
 This command downloads source posts; the versioned bundles also contain MAScope's composed questions and evaluation annotations.
-
-Check task counts, taxonomy distributions, family membership and dependency graphs:
-
-```bash
-mascope verify-structure --runtime data/runtime --annotations data/evaluator \
-  --spec assets/benchmark_spec.json --out structure_report.json
-```
 
 ### 3. Connect your agent system
 
@@ -176,10 +169,8 @@ src/mascope/
   site_agent.py          Frozen specialist prompt and private retrieval loop
   events.py              Canonical event export and aliases
   prompts/               Frozen expert and answer-format prompts
-  verification.py        Release inventory and certification checks
   deterministic.py       Source-and-term matching across the full graph
   reference.py           Annotation validation and expert-role matching
-  construction.py        Source identifiers and binding/retrieval certification
   evaluation.py          Edge aggregation and query-macro capability metrics
   report.py              Repeated-run summaries
   download.py            Verified archives and public source retrieval

@@ -51,35 +51,11 @@ The fragment illustrates the format, not a released task. A successor requires n
 
 An accepted source identifier has prefix `MS-` and twelve Crockford base-32 characters. Identifiers and literal variants are checked exactly; the evaluator never generates or extends acceptance rules. Equivalent source routes must be recorded explicitly and preserve the certified dependency graph.
 
-## Construction
-
-`source_identifier(key, community, post, unit_index)` derives a stable keyed identifier. Generate and retain the private construction key outside the release, check collisions, and apply the resulting identifier map consistently to corpus records and references.
-
-`certify_group(queries, units, corpora)` certifies a candidate family using frozen acceptance and the runtime retriever. Units supply their frozen `objective` and `finding`, accepted sources, and `term_kinds` identifying specific quantities, configuration keys, versions or components. A general concept cannot supply a bound term.
-
-Certification checks:
-
-1. Each acceptance term absent from the public queries and downstream source context (question, title and accepted answer) has exactly one supplying unit.
-2. Every downstream source and equivalent is outside the top eight for the query battery without that supplier, and reachable with its finding.
-3. All family queries pass, the predecessor finding and every accepted equivalent of its source include the bound terms, and the resulting graph is acyclic.
-
-The battery contains the whole question, its sentences and the objective stripped of bound terms, plus combinations with other candidates' findings. The saved certificate contains the battery, top-eight positions, input hashes and corpus checksums. A missing source, ambiguous binding, failed reach check or cycle rejects the candidate. Local-solvability runs are separate from certification.
-
-Certification also retains the full BM25 positions for every probe in `rank_without` and `rank_with`. A failed reach check raises `DependencyCertificationError`; its `details` records the edge, every family query, its probe battery and measured positions. General abbreviations and source links cannot serve as bound terms, and a quantity requires an explicit unit in its registered variants.
+## Validation
 
 ```bash
 mascope verify-references --annotations "$MASCOPE_REFERENCES"
 mascope verify-references --annotations "$MASCOPE_REFERENCES" --runtime data/runtime --release
 ```
 
-The first command validates rules, checksums and families. The second additionally checks the complete release inventory, public family labels, expert ownership, and source IDs against the runtime. It does not replace the recorded certification and solvability checks.
-
-`bind_terms(source_id, target_id, groups, units, queries)` checks literal supplier uniqueness and absence from queries. `reach(corpus, evidence_ids, query_group, predecessor_finding)` returns real ranks both with and without the predecessor and records a failed check without replacing ranks with target values. `certify_group` is the strict family gate and rejects a group if any check fails.
-
-`certification/edges.jsonl` stores per-edge measurements. `certification/returns.jsonl` stores construction records and their provenance. Full verification derives family graphs from the current queries, frozen rules and runtime corpora and compares each saved binding and rank with its recomputed value. Missing, duplicate, unverified or inconsistent edge records fail verification. For multiple accepted passages, `rank_without` is the nearest best rank and `rank_with` is the farthest best rank across the passages. Every passage must pass the top-eight reach condition.
-
-Full verification also checks each profile's corpus size and twelve most frequent tags against the retained records. Tag-frequency ties use alphabetical order. Every required unit must name at least one source identifier in its owning corpus.
-
-C3 discovery is checked on the certified graph: the downstream expert must rank outside the query’s top required-expert count and within the top three for the predecessor finding. A profile-ranking match alone does not certify a dependency.
-
-Verification also checks the structure label of every family. An empty graph yields C1; a nonempty graph that passes discovery across its queries yields C3; the remaining nonempty graphs yield C2.
+The first command validates rules, checksums and family consistency. The second also checks the complete release inventory, public family labels, expert ownership and source identifiers against the runtime.

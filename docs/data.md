@@ -10,21 +10,14 @@
 | Families | 499 |
 | Required unit occurrences | 11,018 |
 | Annotated dependency edges | 3,664 |
-| Edge occurrences with a reproduced certified family graph | 0 |
-| C3 families passing the profile-ranking condition | 13 / 126 |
 | Source pairs | 126,566 |
-| Source pairs with complete question bodies | 0 |
-| Units with ten local-solvability samples | 0 / 1,994 |
-| Within-family query pairs at or above 0.90 MinHash similarity | 122 |
 
-Run the checks against the runtime and matching evaluator directories:
+Verify downloaded archives and reference formats:
 
 ```bash
-mascope verify --runtime data/runtime --annotations data/evaluator \
-  --paper data/evaluator/paper_record.json --out run_manifest.json
+mascope verify --runtime data/runtime
+mascope verify-references --annotations data/evaluator
 ```
-
-This command recomputes family graphs, query similarities and profile rankings from the current files, validates corpus counts and question fields, and checks archive hashes. A failed requirement produces a nonzero exit status. Local-solvability coverage is reported separately. `verify-references` validates the annotation schema and family consistency.
 
 ## Archive layout
 
@@ -42,14 +35,9 @@ evaluator/
   references.jsonl
   families.jsonl
   certification/{edges,returns}.jsonl
-  certification/summary.json
   local_solvability.jsonl
   discovery.jsonl
-  query_similarity.jsonl
-  changes.jsonl
   attribution.jsonl
-  paper_record.json
-  release_status.json
 ```
 
 The public task envelope contains `task_id`, `family_id` and `query`. Families have 3–7 queries sharing units, expert requirements and a dependency graph. S1 requires 2–3 experts, S2 4–5, and S3 6–8. References and construction records remain outside method inputs.

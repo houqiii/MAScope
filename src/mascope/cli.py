@@ -15,16 +15,6 @@ from .runner import load_agent, run
 def parser():
     root = argparse.ArgumentParser(prog="mascope")
     commands = root.add_subparsers(dest="command", required=True)
-    structure = commands.add_parser("verify-structure")
-    structure.add_argument("--runtime", required=True)
-    structure.add_argument("--annotations", required=True)
-    structure.add_argument("--spec")
-    structure.add_argument("--out", required=True)
-    construct = commands.add_parser("certify-family")
-    construct.add_argument("--runtime", required=True)
-    construct.add_argument("--candidate", required=True)
-    construct.add_argument("--validation", required=True)
-    construct.add_argument("--out", required=True)
     fetch = commands.add_parser("download")
     fetch.add_argument("--base-url", default=os.getenv("MASCOPE_DATA_URL"))
     fetch.add_argument("--dest", default="data")
@@ -45,10 +35,6 @@ def parser():
     for name in ["verify", "list", "run", "evaluate"]:
         command = commands.add_parser(name)
         command.add_argument("--runtime", required=True)
-        if name == "verify":
-            command.add_argument("--paper")
-            command.add_argument("--annotations")
-            command.add_argument("--out", default="run_manifest.json")
         if name in {"run", "evaluate"}:
             command.add_argument("--task-ids", nargs="+")
             command.add_argument("--out", required=True)
@@ -76,38 +62,6 @@ def parser():
 
 def main():
     arguments = parser().parse_args()
-    if arguments.command == "verify-structure":
-        from .structure import verify_structure
-
-        report = verify_structure(arguments.runtime, arguments.annotations, arguments.spec)
-        output = Path(arguments.out)
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(json.dumps(report, indent=2) + "\n")
-        print(json.dumps({k: report[k] for k in ["scope", "passed", "failed", "totals"]}, indent=2))
-        if report["failed"]:
-            raise SystemExit(1)
-        return
-    if arguments.command == "certify-family":
-        from .pipeline import assess_family, freeze_family
-
-        dataset = Dataset(arguments.runtime)
-        candidate = json.loads(Path(arguments.candidate).read_text())
-        validation = json.loads(Path(arguments.validation).read_text())
-        corpora = {
-            p["agent_id"]: dataset.corpus(p["agent_id"]) for p in dataset.profiles()
-        }
-        assessment = assess_family(candidate, corpora, dataset.profiles(), validation)
-        output = Path(arguments.out)
-        output.mkdir(parents=True, exist_ok=True)
-        (output / "assessment.json").write_text(json.dumps(assessment, indent=2))
-        if assessment["disposition"] != "freeze":
-            print(assessment["disposition"])
-            raise SystemExit(1)
-        (output / "references.jsonl").write_text(
-            "".join(json.dumps(r) + "\n" for r in freeze_family(candidate, assessment))
-        )
-        print("freeze")
-        return
     if arguments.command == "verify-references":
         evaluator = DeterministicEvaluator(arguments.annotations)
         if arguments.release:
@@ -148,30 +102,7 @@ def main():
         return
     dataset = Dataset(arguments.runtime)
     if arguments.command == "verify":
-        if arguments.paper:
-            from .verification import verify_paper
-
-            if not arguments.annotations:
-                raise ValueError("--paper requires --annotations")
-            report = verify_paper(
-                arguments.runtime, arguments.annotations, arguments.paper, arguments.out
-            )
-            for check in report["checks"]:
-                print(f"{check['status']} {check['check']}")
-            print(
-                json.dumps(
-                    {
-                        "passed": report["passed"],
-                        "failed": report["failed"],
-                        "local_solvability": report["local_solvability_coverage"],
-                    },
-                    indent=2,
-                )
-            )
-            if report["failed"]:
-                raise SystemExit(1)
-        else:
-            print(json.dumps(dataset.verify(), indent=2))
+        print(json.dumps(dataset.verify(), indent=2))
     elif arguments.command == "list":
         for task in dataset:
             print(
