@@ -29,7 +29,7 @@ The environment leaves recruitment, delegation, communication and synthesis to t
 
 The installed benchmark provides the 51 site-agent wrappers, task loading and evaluation. Twelve optional log adapters are listed separately under [`adapters/`](adapters/README.md); they are not imported, registered or executed by the environment. Method implementations are supplied by the user. Data archives are distributed separately.
 
-Data version **2.0.0 is a draft**. Archive availability is listed in [Data](docs/data.md#release-status).
+Data files are distributed separately from the code. See [Data and downloads](docs/data.md).
 
 ## What the measurements distinguish
 
@@ -66,7 +66,7 @@ The runtime uses the Python standard library and an OpenAI-compatible chat-compl
 
 ### 2. Download the data
 
-Once the versioned archives are published, download and verify them:
+Public data downloads are not yet available. Once enabled, use:
 
 ```bash
 mascope download --dest data
@@ -74,7 +74,7 @@ mascope verify --runtime data/runtime
 mascope list --runtime data/runtime
 ```
 
-The downloader uses the bundled asset URLs and verifies archive sizes and SHA-256 checksums. Public release assets require no GitHub account or access token. The runtime bundle contains questions, public profiles and member corpora. The evaluator bundle contains the matching references and stays outside the method's inputs. See [Data and downloads](docs/data.md) for component selection, source retrieval and release details.
+The downloader uses the bundled asset URLs and verifies archive sizes and SHA-256 checksums. The runtime bundle contains questions, public profiles and member corpora. The evaluator bundle contains the matching references and stays outside the method's inputs. See [Data and downloads](docs/data.md) for component selection, source retrieval and release details.
 
 The underlying Stack Exchange posts are publicly accessible. To refresh their source records independently:
 
@@ -82,7 +82,7 @@ The underlying Stack Exchange posts are publicly accessible. To refresh their so
 mascope fetch-sources --manifest data/runtime/sources.json --dest data/source-posts
 ```
 
-This command downloads source posts; the versioned bundles also contain MAScope's composed questions and evaluation annotations.
+This command downloads source posts; the data bundles also contain MAScope's composed questions and evaluation annotations.
 
 ### 3. Connect your agent system
 
@@ -156,7 +156,7 @@ mascope summarize \
   --out results/summary.json
 ```
 
-The report contains each repetition's value, the mean and the sample standard deviation. Runs must use the same dataset version, scorer, references and task set. Use family-aware splits for development and family-aware resampling for task-level uncertainty; each family contains 3–7 queries sharing units, required experts and the dependency graph. Hold out entire families.
+The report contains each repetition's value, the mean and the sample standard deviation. Runs must use the same dataset, references and task set. Use family-aware splits for development and family-aware resampling for task-level uncertainty; each family contains 3–7 queries sharing units, required experts and the dependency graph. Hold out entire families.
 
 ## Repository layout
 
@@ -176,7 +176,7 @@ src/mascope/
   download.py            Verified archives and public source retrieval
   model.py               OpenAI-compatible model interface
   cli.py                 Command-line entrypoints
-  release.json           Data version and archive checksums
+  release.json           Data archive locations and checksums
 adapters/                Separate method-to-event mappings and configurations
 docs/                    Benchmark, data, integration and evaluation guides
 tests/                   Runtime, evaluation and release-interface checks

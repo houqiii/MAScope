@@ -1,11 +1,9 @@
 # Data
 
-## Release status
+## Dataset
 
-| Field | Version 2.0.0 |
+| Field | Count |
 | --- | ---: |
-| Release | Draft |
-| Public archive downloads | Not published |
 | Queries | 2,766 |
 | Families | 499 |
 | Required unit occurrences | 11,018 |
@@ -46,11 +44,11 @@ Source identifiers are keyed and frozen with the data. Construction keys and ide
 
 ## Downloads and mirrors
 
+Public data downloads are not yet available. The runtime and evaluator archives must be used together.
+
 The packaged release manifest pins archive byte sizes and SHA-256 hashes. Asset URLs use stable numeric GitHub identifiers. The downloader requests archive bytes directly, so it does not require source mirrors to implement GitHub Release pages.
 
 Use `--component runtime` or `--component evaluator` for one bundle. To select a mirror, pass `--base-url` or set `MASCOPE_DATA_URL` to an HTTP(S) or local `file://` directory containing the pinned filenames. The same `mascope download --dest data` command works from an anonymous source snapshot that includes the current release manifest.
-
-Version 1.1.0 remains available as a legacy schema 1.0 release. Its references support only the explicit semantic scorer. They cannot be substituted for schema 2.0 references.
 
 ## Source retrieval
 

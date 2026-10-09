@@ -93,7 +93,3 @@ Each repetition must use identical task IDs, dataset, scorer and reference hashe
 Use `mascope evaluate ... --identifier-free` to rescore the same runs with the identifier requirement removed from final acceptance. The output includes strict success, identifier-free success, the gain in percentage points, and each rule's `dependency_success_drop`: 100 × (success on C1 − success on C2∪C3) / success on C1. A zero C1 success rate gives null. Local stage rules remain unchanged.
 
 Per-query outputs `answered` and `graph_carried` describe final acceptance and whether all edges in a nonempty dependency graph reach stage 5. They do not supply stage-rate denominators.
-
-## Legacy scoring
-
-Schema 1.0 data can be evaluated explicitly with `--scorer semantic --judge-model MODEL`. This optional legacy mode calls a model and is not the deterministic benchmark protocol. The default scorer never contacts a model and rejects `--judge-model`.
