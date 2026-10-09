@@ -27,9 +27,7 @@ The environment leaves recruitment, delegation, communication and synthesis to t
 - **Deterministic evaluation:** exact source identifiers and frozen term variants determine acceptance. Every dependency is scored individually; expert recall and precision are averaged over queries.
 - **Protocol-independent execution:** connect an agent system through one Python entrypoint. The environment records recruitment, member work, delivered inputs, contributions, final answers and model usage.
 
-The installed benchmark provides the 51 site-agent wrappers, task loading and evaluation. Twelve optional log adapters are listed separately under [`adapters/`](adapters/README.md); they are not imported, registered or executed by the environment. Method implementations are supplied by the user. Data archives are distributed separately.
-
-Data files are distributed separately from the code. See [Data and downloads](docs/data.md).
+The installed benchmark provides the 51 site-agent wrappers, task loading and evaluation. Twelve optional log adapters are listed separately under [`adapters/`](adapters/README.md); they are not imported, registered or executed by the environment. Method implementations are supplied by the user. Data files are kept outside the code repository; see [Data](docs/data.md) for layout and loading instructions.
 
 ## What the measurements distinguish
 
@@ -64,17 +62,16 @@ python -m pip install -e .
 
 The runtime uses the Python standard library and an OpenAI-compatible chat-completions endpoint.
 
-### 2. Download the data
+### 2. Set up the data
 
-Public data downloads are not yet available. Once enabled, use:
+Place the matching runtime and evaluator bundles in `data/runtime` and `data/evaluator`, then verify the data and list the tasks:
 
 ```bash
-mascope download --dest data
 mascope verify --runtime data/runtime
 mascope list --runtime data/runtime
 ```
 
-The downloader uses the bundled asset URLs and verifies archive sizes and SHA-256 checksums. The runtime bundle contains questions, public profiles and member corpora. The evaluator bundle contains the matching references and stays outside the method's inputs. See [Data and downloads](docs/data.md) for component selection, source retrieval and release details.
+The runtime bundle contains questions, public profiles and member corpora. The evaluator bundle contains the matching references and stays outside the method's inputs. See [Data](docs/data.md) for archive loading, component selection and source retrieval.
 
 The underlying Stack Exchange posts are publicly accessible. To refresh their source records independently:
 

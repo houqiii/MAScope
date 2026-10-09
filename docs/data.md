@@ -10,7 +10,7 @@
 | Annotated dependency edges | 3,664 |
 | Source pairs | 126,566 |
 
-Verify downloaded archives and reference formats:
+With the runtime and evaluator bundles under `data/`, verify archive integrity and reference formats:
 
 ```bash
 mascope verify --runtime data/runtime
@@ -42,13 +42,17 @@ The public task envelope contains `task_id`, `family_id` and `query`. Families h
 
 Source identifiers are keyed and frozen with the data. Construction keys and identifier maps remain private.
 
-## Downloads and mirrors
+## Loading archives
 
-Public data downloads are not yet available. The runtime and evaluator archives must be used together.
+Use the runtime and evaluator archives together. Extract them into `data/runtime` and `data/evaluator`, respectively.
 
-The packaged release manifest pins archive byte sizes and SHA-256 hashes. Asset URLs use stable numeric GitHub identifiers. The downloader requests archive bytes directly, so it does not require source mirrors to implement GitHub Release pages.
+For archives hosted at an accessible HTTP(S) location or stored in a local directory, the downloader verifies their byte sizes and SHA-256 hashes against the bundled `release.json` manifest:
 
-Use `--component runtime` or `--component evaluator` for one bundle. To select a mirror, pass `--base-url` or set `MASCOPE_DATA_URL` to an HTTP(S) or local `file://` directory containing the pinned filenames. The same `mascope download --dest data` command works from an anonymous source snapshot that includes the current release manifest.
+```bash
+mascope download --base-url "$MASCOPE_DATA_URL" --dest data
+```
+
+Set `MASCOPE_DATA_URL` to the directory containing the filenames listed in the manifest. A local directory can be supplied as a `file://` URL. Use `--component runtime` or `--component evaluator` to load one bundle.
 
 ## Source retrieval
 
