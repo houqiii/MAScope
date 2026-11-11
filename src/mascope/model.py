@@ -31,9 +31,10 @@ class OpenAICompatible:
         base_url=None,
         api_key=None,
         timeout=180,
-        temperature=0.3,
-        top_p=0.95,
+        temperature=None,
+        top_p=None,
         seed=None,
+        reasoning_effort="high",
     ):
         self.model = model
         self.base_url = (
@@ -41,7 +42,15 @@ class OpenAICompatible:
         ).rstrip("/")
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self.timeout = timeout
-        self.decoding = {"temperature": temperature, "top_p": top_p}
+        self.decoding = {
+            key: value
+            for key, value in {
+                "temperature": temperature,
+                "top_p": top_p,
+                "reasoning_effort": reasoning_effort,
+            }.items()
+            if value is not None
+        }
         if seed is not None:
             self.decoding["seed"] = seed
         if not self.api_key:

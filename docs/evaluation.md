@@ -15,6 +15,8 @@ The evaluator requires schema 2.0 [frozen references](reference-format.md). Miss
 
 ## Acceptance and coverage
 
+Acceptance reads only the `answer` field of the `submit` event, which must agree with the run's stored final answer, including an empty answer at the budget cap. Discussion, voting and aggregation outputs do not enter acceptance.
+
 For unit u of query q, b(q,u) is one if the answer contains an accepted exact source identifier and at least one registered variant from each required term group. Alternatives are checked independently: an identifier from one alternative cannot be combined with terms from another. Matching is literal and case-sensitive. Case, inflection and quantity variants must be listed before execution; no paraphrases are inferred while scoring.
 
 - Query success is one exactly when every required unit passes b(q,u).

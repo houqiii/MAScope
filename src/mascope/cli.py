@@ -47,6 +47,7 @@ def parser():
             command.add_argument("--call-budget", type=int, default=256)
             command.add_argument("--resume", action="store_true")
             command.add_argument("--seed", type=int)
+            command.add_argument("--reasoning-effort", default="high")
         if name == "evaluate":
             command.add_argument("--annotations", required=True)
             command.add_argument("--runs", required=True)
@@ -114,7 +115,12 @@ def main():
         for record in run(
             dataset,
             load_agent(arguments.agent),
-            OpenAICompatible(arguments.model, arguments.base_url, seed=arguments.seed),
+            OpenAICompatible(
+                arguments.model,
+                arguments.base_url,
+                seed=arguments.seed,
+                reasoning_effort=arguments.reasoning_effort,
+            ),
             arguments.out,
             arguments.task_ids,
             arguments.token_budget,

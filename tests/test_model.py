@@ -34,8 +34,10 @@ def test_provider_response_and_request_contract(monkeypatch, mode):
         ) == Completion("Result", 13, 4)
         assert seen[0]["response_format"] == {"type": "json_object"}
         assert seen[0]["max_tokens"] == 90
-        assert seen[0]["temperature"] == 0.3
-        assert seen[0]["top_p"] == 0.95
+        assert "temperature" not in seen[0]
+        assert "top_p" not in seen[0]
+        assert "seed" not in seen[0]
+        assert seen[0]["reasoning_effort"] == "high"
     else:
         with pytest.raises(RuntimeError):
             model.complete([])
@@ -93,3 +95,46 @@ def test_native_tool_calls_preserve_usage(monkeypatch):
         [], tools=[{"type": "function", "function": {"name": "retrieve"}}]
     )
     assert result.message == message and result.input_tokens == 10
+
+
+def test_all_phases_share_default_decoding_and_resume_checks_effort(
+    dataset, tmp_path, monkeypatch
+):
+    from mascope.runner import run
+
+    requests = []
+
+    def response(request, timeout):
+        requests.append(json.loads(request.data))
+        return BytesIO(json.dumps({
+            "choices": [{"finish_reason": "stop", "message": {"content": "result"}}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 2},
+        }).encode())
+
+    def agent(env):
+        for phase in ("planning", "members", "synthesis", "memory"):
+            env.complete([], phase=phase)
+        env.submit("result")
+
+    monkeypatch.setattr("urllib.request.urlopen", response)
+    model = OpenAICompatible("example", api_key="fixture")
+    result = next(run(dataset, agent, model, tmp_path, task_ids=["task_one"]))
+    assert result["status"] == "completed"
+    assert result["decoding"] == {"reasoning_effort": "high"}
+    assert result["usage"]["tokens"] == 48
+    assert len(requests) == 4
+    for request in requests:
+        assert request["reasoning_effort"] == "high"
+        assert request["max_tokens"] == 4096
+        assert not {"temperature", "top_p", "seed"} & request.keys()
+    model = OpenAICompatible("example", api_key="fixture", reasoning_effort="low")
+    with pytest.raises(ValueError, match="different task or run configuration"):
+        next(run(dataset, agent, model, tmp_path, task_ids=["task_one"], resume=True))
+
+
+def test_explicit_alternative_decoding_is_retained():
+    model = OpenAICompatible(
+        "example", api_key="fixture", temperature=0.3, top_p=0.95,
+        seed=7, reasoning_effort=None,
+    )
+    assert model.decoding == {"temperature": 0.3, "top_p": 0.95, "seed": 7}

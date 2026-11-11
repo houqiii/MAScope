@@ -106,7 +106,7 @@ mascope run \
   --out results/run-1
 ```
 
-The default decoding is temperature 0.3, top-p 0.95 and up to 4,096 output tokens per call. Use `--seed` when supported by the provider. Use `--task-ids` for a selected subset and `--resume` to retain completed run files. Each task starts with a fresh environment. The default budget is 2,000,000 tokens and 256 model calls per task.
+The paper uses Claude Sonnet 5 with default sampling and effort high, with up to 4,096 output tokens per call. The transport leaves temperature and top-p unset and requests `reasoning_effort="high"`. Use an endpoint that honors this setting, or whose documented model default is high; see [Integration](docs/integration.md). `--reasoning-effort` and `--seed` support other configurations when supported by the provider; the paper's five repetitions do not set a seed. Use `--task-ids` for a selected subset and `--resume` to retain completed run files. Each task starts with a fresh environment. The default budget is 2,000,000 tokens and 256 model calls per task.
 
 <p align="center">
   <img src="assets/figures/workflow.png" width="100%" alt="A service-diagnosis task from initialization through specialist collaboration to evaluation">

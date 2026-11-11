@@ -87,9 +87,11 @@ class DeterministicEvaluator:
             raise ValueError("Invalid trace event ordering")
         answer = (record.get("answer") or {}).get("text", "")
         finals = [e for e in events if e["kind"] == "final"]
-        if (answer and (len(finals) != 1 or finals[0]["text"] != answer)) or (
-            record.get("answer") is None and finals
-        ):
+        if record.get("answer") is not None:
+            if len(finals) != 1 or finals[0]["text"] != answer:
+                raise ValueError("Submitted answer disagrees with trace")
+            answer = finals[0]["text"]
+        elif finals:
             raise ValueError("Submitted answer disagrees with trace")
         if finals and events[-1] != finals[0]:
             raise ValueError("Trace contains events after submission")

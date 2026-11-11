@@ -470,3 +470,29 @@ def test_successful_edge_cannot_hide_an_unassigned_edge_in_another_query(tmp_pat
     assert report["dependency_counts"] == [3, 2, 2, 2, 2]
     assert report["task_orchestration"] == pytest.approx(200 / 3)
     assert report["dependency_survival"] == pytest.approx(200 / 3)
+
+
+@pytest.mark.parametrize("submission", ["missing", "mismatched", "duplicate"])
+def test_empty_stored_answer_requires_one_matching_submit(tmp_path, submission):
+    run = record()
+    run["answer"]["text"] = ""
+    if submission == "missing":
+        run["events"].pop()
+    elif submission == "duplicate":
+        run["events"][-1]["text"] = ""
+        run["events"].append({"kind": "final", "text": ""})
+        reorder(run)
+    with pytest.raises(ValueError, match="Submitted answer disagrees with trace"):
+        score(evaluator(tmp_path), run)
+
+
+def test_empty_cap_submission_does_not_score_discussion(tmp_path):
+    run = record()
+    discussion = run["answer"]["text"]
+    set_answer(run, "")
+    run["status"] = "budget_exhausted"
+    run["events"].insert(-1, {"kind": "aggregate", "text": discussion})
+    reorder(run)
+    row = score(evaluator(tmp_path), run)
+    assert row["success"] == row["evidence_coverage"] == 0
+    assert all(not edge["stages"][4] for edge in row["edge_judgments"])

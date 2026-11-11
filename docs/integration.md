@@ -55,7 +55,7 @@ The runtime archive contains the public task envelope and member resources. The 
 
 ## Reproducible execution
 
-The default transport requests temperature 0.3 and top-p 0.95. `--seed` is forwarded when supplied; provider support and reproducibility remain provider-dependent. Run records retain decoding settings and runtime version, and resume rejects changed settings. Retrieval calls are counted separately; their text enters token accounting when supplied to a model. The local runtime does not enforce a process security boundary.
+The default transport omits temperature and top-p and requests `reasoning_effort="high"` for every model-call phase. This matches the paper's default sampling and high effort; the five repetitions use no fixed seed. `--reasoning-effort` and `--seed` are forwarded when supplied for other configurations. Provider support remains provider-dependent: Anthropic's [OpenAI compatibility layer](https://platform.claude.com/docs/en/cli-sdks-libraries/libraries/openai-sdk) ignores `reasoning_effort` and `seed`; Claude Sonnet 5 uses [high effort by default](https://platform.claude.com/docs/en/build-with-claude/effort). To change effort on the native Claude API, provide a model implementation using `output_config.effort` through the existing `complete()` interface. Run records retain decoding settings and runtime version, and resume rejects changed settings. Retrieval calls are counted separately; their text enters token accounting when supplied to a model. The local runtime does not enforce a process security boundary.
 
 ## Canonical events and visible inputs
 
